@@ -1,14 +1,35 @@
 import express from "express";
 import http from "http";
 import { Server } from "socket.io";
+import path from "path";
+import { fileURLToPath } from "url";
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+
+const io = new Server(server, {
+  cors: { origin: "*" },
+});
 
 const PORT = process.env.PORT || 3000;
 
-app.use(express.static("public"));
+// Reliable absolute path to /public
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const publicDir = path.join(__dirname, "public");
+
+// Serve static files
+app.use(express.static(publicDir));
+
+// Make sure "/" always serves index.html
+app.get("/", (req, res) => {
+  res.sendFile(path.join(publicDir, "index.html"));
+});
+
+// Simple health check (useful for Railway)
+app.get("/health", (req, res) => {
+  res.status(200).send("ok");
+});
 
 /**
  * Room model:
@@ -42,7 +63,6 @@ function publicPlayers(room) {
 }
 
 function getRoomOfSocket(socket) {
-  // socket.data.roomCode set when joining
   const code = socket.data.roomCode;
   if (!code) return null;
   return rooms.get(code) || null;
@@ -54,7 +74,7 @@ function removePlayerFromRoom(code, socketId) {
 
   room.players = room.players.filter((p) => p.socketId !== socketId);
 
-  // If host left, promote lowest seat to host (simple + deterministic)
+  // If host left, promote lowest seat to host
   if (room.hostId === socketId) {
     const nextHost = room.players.slice().sort((a, b) => a.seat - b.seat)[0];
     if (nextHost) {
@@ -66,9 +86,7 @@ function removePlayerFromRoom(code, socketId) {
     }
   }
 
-  if (room.players.length === 0) {
-    rooms.delete(code);
-  }
+  if (room.players.length === 0) rooms.delete(code);
 }
 
 io.on("connection", (socket) => {
@@ -105,20 +123,15 @@ io.on("connection", (socket) => {
   });
 
   socket.on("joinRoom", ({ code, name }) => {
-    const cleanCode = String(code || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+    const cleanCode = String(code || "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 8);
+
     const room = rooms.get(cleanCode);
+    if (!room) return socket.emit("roomError", "Room not found.");
+    if (room.players.length >= 4) return socket.emit("roomError", "Room is full (max 4).");
 
-    if (!room) {
-      socket.emit("roomError", "Room not found.");
-      return;
-    }
-
-    if (room.players.length >= 4) {
-      socket.emit("roomError", "Room is full (max 4).");
-      return;
-    }
-
-    // Pick the lowest available seat
     const used = new Set(room.players.map((p) => p.seat));
     let seat = 0;
     while (used.has(seat)) seat++;
@@ -142,28 +155,24 @@ io.on("connection", (socket) => {
 
     io.to(cleanCode).emit("roomUpdate", { code: cleanCode, players: publicPlayers(room) });
 
-    // If the host already started and we have a snapshot, send it to the joiner.
-    if (room.lastSnapshot) {
-      socket.emit("hostState", room.lastSnapshot);
-    }
+    if (room.lastSnapshot) socket.emit("hostState", room.lastSnapshot);
   });
 
   // Host broadcasts full state snapshots
   socket.on("hostState", (snapshot) => {
     const room = getRoomOfSocket(socket);
     if (!room) return;
-    if (room.hostId !== socket.id) return; // only host
+    if (room.hostId !== socket.id) return;
 
     room.lastSnapshot = snapshot;
-    // Broadcast to everyone (including host; harmless)
     io.to(socket.data.roomCode).emit("hostState", snapshot);
   });
 
-  // Non-host requests an action; server forwards to current host
+  // Non-host requests an action; server forwards to host
   socket.on("requestAction", ({ type, payload }) => {
     const room = getRoomOfSocket(socket);
     if (!room) return;
-    if (room.hostId === socket.id) return; // host doesn’t request
+    if (room.hostId === socket.id) return;
 
     const from = room.players.find((p) => p.socketId === socket.id);
     if (!from) return;
@@ -186,8 +195,6 @@ io.on("connection", (socket) => {
     if (room) {
       io.to(code).emit("roomUpdate", { code, players: publicPlayers(room) });
 
-      // Notify new host (if any) that they are now host.
-      // Front-end decides what to do.
       const hostPlayer = room.players.find((p) => p.socketId === room.hostId);
       if (hostPlayer) {
         io.to(room.hostId).emit("roomJoined", {
@@ -202,5 +209,6 @@ io.on("connection", (socket) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`BIVOPOLY-ONLINE running on http://localhost:${PORT}`);
+  console.log("Server running on port", PORT);
 });
+
