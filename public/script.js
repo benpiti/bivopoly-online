@@ -4663,6 +4663,11 @@ function initOnline() {
 
   ONLINE.socket = io();
 
+  // Transition guests immediately when host starts the game
+  ONLINE.socket.on("onlineStartGame", () => {
+    hideLobbyOverlay();
+  });
+
   ONLINE.socket.on("connect", () => {
     ONLINE.connected = true;
     setLobbyStatus("Connected. Create or join a room.");

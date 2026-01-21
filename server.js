@@ -95,7 +95,15 @@ io.on("connection",(socket)=>{
     io.to(room.hostId).emit("hostAction",{type:String(type||"").toUpperCase(), payload:payload??null, fromSeat:from.seat, fromName:from.name});
   });
 
-  socket.on("disconnect",()=>{
+  
+  // HOST: start online game (broadcast to entire room)
+  socket.on("hostStartOnlineGame", () => {
+    const code = socket.data && socket.data.roomCode;
+    if (!code) return;
+    io.to(code).emit("onlineStartGame");
+  });
+
+socket.on("disconnect",()=>{
     const code=socket.data.roomCode;
     if(!code) return;
     removePlayer(code, socket.id);
