@@ -1306,6 +1306,125 @@ let onlineState = {
   myColorName: "Orange"
 };
 
+// =====================
+// ONLINE SYNC (HOST-AUTH)
+// =====================
+// Host runs game logic. Everyone else sends requests.
+// Host broadcasts snapshots + dice rolls.
+
+let onlineSyncEnabled = false;
+let onlineSnapshotTimer = null;
+let lastD1 = null;
+let lastD2 = null;
+let pendingLandingContext = null; // { allowExtraTurnOnDoubles, d1, d2 }
+
+function hostPurchaseLandedProperty(tileIndex) {
+  const currentIdx = turnOrder && turnOrder.length ? turnOrder[currentTurnPointer] : 0;
+  const player = players[currentIdx];
+  const tile = board[tileIndex];
+  if (!player || !tile) return;
+  if (tile.owner != null) return;
+  if (!(tile.type === "property" || tile.type === "airport" || tile.type === "utility")) return;
+  if (player.money < (tile.price || 0)) return;
+
+  player.money -= tile.price;
+  tile.owner = player.id;
+  if (tile.type === "property" || tile.type === "airport" || tile.type === "utility") {
+    if (!player.properties.includes(tile.index)) player.properties.push(tile.index);
+  }
+
+  updateMoneyUI();
+  renderBoard();
+  if (selectedTileIndex === tile.index) renderPropertyInfo(tile);
+  updateHoldingsPanel();
+  logEvent(`${player.name} bought ${tile.name} for $${tile.price}.`);
+
+  
+          finalizeAfterLanding(allowExtraTurnOnDoubles, d1, d2);
+          return;
+const ctx = pendingLandingContext || { allowExtraTurnOnDoubles: true, d1: lastD1, d2: lastD2 };
+  pendingLandingContext = null;
+  finalizeAfterLanding(!!ctx.allowExtraTurnOnDoubles, ctx.d1, ctx.d2);
+}
+
+function hostSkipLandedProperty(tileIndex) {
+  const currentIdx = turnOrder && turnOrder.length ? turnOrder[currentTurnPointer] : 0;
+  const player = players[currentIdx];
+  const tile = board[tileIndex];
+  if (!player || !tile) return;
+
+  if (rules && rules.auctionMode) {
+    logEvent(`Auction started for ${tile.name} (purchase skipped).`);
+    startAuction(tile);
+  } else {
+    logEvent(`${player.name} chose not to buy ${tile.name}.`);
+  }
+
+  const ctx = pendingLandingContext || { allowExtraTurnOnDoubles: true, d1: lastD1, d2: lastD2 };
+  pendingLandingContext = null;
+  finalizeAfterLanding(!!ctx.allowExtraTurnOnDoubles, ctx.d1, ctx.d2);
+}
+
+
+function isOnlineHost() {
+  return !!socket && !!onlineState && !!onlineState.code && !!onlineState.isHost && onlineSyncEnabled;
+}
+function isOnlineGuest() {
+  return !!socket && !!onlineState && !!onlineState.code && !onlineState.isHost && onlineSyncEnabled;
+}
+
+function buildOnlineSnapshot() {
+  // Keep this focused on gameplay state. UI will re-render from these.
+  return {
+    players,
+    board,
+    turnOrder,
+    currentTurnPointer,
+    rules,
+    doublesInARow,
+    lastRollTotal,
+    freeParkingPot: (typeof freeParkingPot !== "undefined") ? freeParkingPot : 0,
+    auctionActive: (typeof auctionActive !== "undefined") ? auctionActive : false
+  };
+}
+
+function applyOnlineSnapshot(snap) {
+  if (!snap) return;
+  if (snap.players) players = snap.players;
+  if (snap.board) board = snap.board;
+  if (snap.turnOrder) turnOrder = snap.turnOrder;
+  if (typeof snap.currentTurnPointer === "number") currentTurnPointer = snap.currentTurnPointer;
+  if (snap.rules) rules = snap.rules;
+  if (typeof snap.doublesInARow === "number") doublesInARow = snap.doublesInARow;
+  if (typeof snap.lastRollTotal === "number") lastRollTotal = snap.lastRollTotal;
+  if (typeof snap.freeParkingPot === "number" && typeof freeParkingPot !== "undefined") freeParkingPot = snap.freeParkingPot;
+  if (typeof snap.auctionActive === "boolean" && typeof auctionActive !== "undefined") auctionActive = snap.auctionActive;
+
+  // Refresh UI
+  renderBoard();
+  updateMoneyUI();
+  updateHoldingsPanel();
+  populateTradeOtherPlayers();
+  populateTradePropertyLists();
+  updateCurrentTurnDisplay();
+}
+
+function hostBroadcastSnapshot() {
+  if (!isOnlineHost()) return;
+  try {
+    socket.emit("hostState", buildOnlineSnapshot());
+  } catch (_) {}
+}
+
+function ensureHostSnapshotTimer() {
+  if (!isOnlineHost()) return;
+  if (onlineSnapshotTimer) return;
+  onlineSnapshotTimer = setInterval(() => {
+    hostBroadcastSnapshot();
+  }, 250);
+}
+
+
 function showOnlineError(msg) {
   if (!onlineErrorEl) return;
   onlineErrorEl.textContent = msg;
@@ -1568,6 +1687,70 @@ if (socket) {
     applyOnlinePlayersToSetup(list);
     closeOnlineOverlay();
   });
+
+  // Enable online syncing once a game is started
+  onlineSyncEnabled = true;
+
+  // Host starts snapshot timer (guests ignore)
+  ensureHostSnapshotTimer();
+
+
+  // Guests receive authoritative snapshots from host
+  socket.on("hostState", (snap) => {
+    if (isOnlineHost()) return; // host already has state
+    applyOnlineSnapshot(snap);
+  });
+
+  // Everyone receives dice rolls so guests can animate dice
+  socket.on("diceRoll", ({ d1, d2, total, playerSeat }) => {
+    // Update text
+    const name = (players && typeof playerSeat === "number" && players[playerSeat]) ? players[playerSeat].name : "Player";
+    if (diceResultEl) diceResultEl.textContent = `${name} rolled ${d1} + ${d2} = ${total}`;
+    // Animate center dice overlay for guests (host already did it locally)
+    if (isOnlineGuest()) {
+      showDiceOverlay(d1, d2, total);
+      setTimeout(() => hideDiceOverlay(), DICE_ANIM_MS);
+    }
+  });
+
+  // Host receives action requests from guests
+  socket.on("hostAction", ({ type, payload, fromSeat }) => {
+    if (!isOnlineHost()) return;
+
+    // Only allow the player whose turn it is to request actions
+    const currentIdx = turnOrder && turnOrder.length ? turnOrder[currentTurnPointer] : 0;
+    if (typeof fromSeat === "number" && fromSeat !== currentIdx) {
+      return;
+    }
+
+    const t = String(type || "").toUpperCase();
+    if (t === "ROLL") {
+      if (rollBtn) rollBtn.click();
+      setTimeout(hostBroadcastSnapshot, 0);
+      return;
+    }
+    if (t === "END_TURN") {
+      if (endTurnBtn) endTurnBtn.click();
+      setTimeout(hostBroadcastSnapshot, 0);
+      return;
+    }
+    if (t === "BANKRUPT") {
+      if (bankruptBtn) bankruptBtn.click();
+      setTimeout(hostBroadcastSnapshot, 0);
+      return;
+    }
+    if (t === "BUY_TILE" && payload && typeof payload.tileIndex === "number") {
+      hostPurchaseLandedProperty(payload.tileIndex);
+      setTimeout(hostBroadcastSnapshot, 0);
+      return;
+    }
+    if (t === "SKIP_BUY" && payload && typeof payload.tileIndex === "number") {
+      hostSkipLandedProperty(payload.tileIndex);
+      setTimeout(hostBroadcastSnapshot, 0);
+      return;
+    }
+  });
+
 }
 
 // =====================
@@ -2189,7 +2372,7 @@ function calculateRent(tile, owner) {
 // LANDING EFFECTS
 // =====================
 
-function handleLanding(player, passedGo) {
+function handleLanding(player, passedGo, allowExtraTurnOnDoubles = false, d1 = null, d2 = null) {
   const tile = getBoardTile(player.position);
   if (!tile) return;
 
@@ -2345,6 +2528,9 @@ function showActionModal(options) {
   }
 
   actionOverlayEl.style.display = "flex";
+
+  return false;
+
 }
 
 function showInfoModal(message, title = "Bivopoly") {
@@ -2353,6 +2539,7 @@ function showInfoModal(message, title = "Bivopoly") {
     body: message,
     primaryLabel: "OK"
   });
+      return true;
 }
 
 // =====================
@@ -2721,7 +2908,9 @@ function handlePropertyAirportUtility(player, tile) {
           ? "Utility: rent depends on dice roll and number of utilities owned."
           : `Base Rent: $${tile.baseRent || 0}`;
 
-      showActionModal({
+      pendingLandingContext = { allowExtraTurnOnDoubles, d1, d2 };
+
+            showActionModal({
         title: tile.name,
         body:
           `${player.name} landed on ${tile.name}.\n` +
@@ -2730,7 +2919,13 @@ function handlePropertyAirportUtility(player, tile) {
           `Do you want to buy it?`,
         primaryLabel: "Buy",
         onPrimary: () => {
-          // Complete purchase
+          // Online guest: request host to buy, then wait for snapshot
+          if (isOnlineGuest()) {
+            socket.emit("requestAction", { type: "BUY_TILE", payload: { tileIndex: tile.index } });
+            return;
+          }
+
+          // Host / offline: complete purchase
           player.money -= tile.price;
           tile.owner = player.id;
 
@@ -2751,12 +2946,22 @@ function handlePropertyAirportUtility(player, tile) {
         },
         secondaryLabel: rules.auctionMode ? "Skip (Auction)" : "Skip",
         onSecondary: () => {
+          // Online guest: request host to skip/auction
+          if (isOnlineGuest()) {
+            socket.emit("requestAction", { type: "SKIP_BUY", payload: { tileIndex: tile.index } });
+            return;
+          }
+
           if (rules.auctionMode) {
             logEvent(`Auction started for ${tile.name} (purchase skipped).`);
             startAuction(tile);
           } else {
             logEvent(`${player.name} chose not to buy ${tile.name}.`);
           }
+
+          finalizeAfterLanding(allowExtraTurnOnDoubles, d1, d2);
+          return;
+
         }
       });
     } else {
@@ -4005,6 +4210,24 @@ function attemptJailRoll(playerIdx, player) {
 }
 
 // Shared movement/landing logic used by normal rolls & jail rolls
+
+function finalizeAfterLanding(allowExtraTurnOnDoubles, d1, d2) {
+  // Doubles = extra turn (only in normal movement, not leaving jail)
+  if (allowExtraTurnOnDoubles && d1 !== null && d2 !== null && d1 === d2) {
+    showInfoModal(`${players[turnOrder[currentTurnPointer]].name} rolled doubles and gets another turn!`);
+    updateCurrentTurnDisplay();
+  } else {
+    advanceToNextPlayer();
+  }
+
+  renderBoard();
+  updateHoldingsPanel();
+  populateTradeOtherPlayers();
+  populateTradePropertyLists();
+
+  // Sync
+  hostBroadcastSnapshot();
+}
 function performMovementAndLanding(playerIdx, player, rollTotal, allowExtraTurnOnDoubles, d1 = null, d2 = null) {
   const oldPos = player.position;
   let newPos = (oldPos + rollTotal) % board.length;
@@ -4039,7 +4262,11 @@ function performMovementAndLanding(playerIdx, player, rollTotal, allowExtraTurnO
 
   setTimeout(() => {
     if (newPos !== 30) {
-      handleLanding(player, passedGo);
+      const awaitingDecision = handleLanding(player, passedGo, allowExtraTurnOnDoubles, d1, d2);
+        if (awaitingDecision) {
+          // landing will finalize turn after the player chooses in the modal
+          return;
+        }
     }
 
     // Extra turn only allowed for NORMAL doubles (not leaving jail)
@@ -4062,6 +4289,9 @@ function advanceToNextPlayer() {
   doublesInARow = 0; // reset when a turn fully ends
   currentTurnPointer = (currentTurnPointer + 1) % turnOrder.length;
   updateCurrentTurnDisplay();
+
+  // Online sync
+  hostBroadcastSnapshot();
 }
 
 let currentTurnPhase = "Ready to Roll";
@@ -4099,6 +4329,12 @@ function startPostJailRoll(playerIdx) {
   const d1 = Math.floor(Math.random() * 6) + 1;
   const d2 = Math.floor(Math.random() * 6) + 1;
   const rollTotal = d1 + d2;
+    lastD1 = d1;
+    lastD2 = d2;
+    if (isOnlineHost()) {
+      try { socket.emit("diceRoll", { d1, d2, total: rollTotal, playerSeat: currentIdx }); } catch(_) {}
+    }
+
   lastRollTotal = rollTotal;
 
   if (diceResultEl) {
@@ -4264,21 +4500,14 @@ function performMovementAndLanding(
           );
         } else {
           // Normal landing
-          handleLanding(player, passedGo);
+          const awaitingDecision = handleLanding(player, passedGo, allowExtraTurnOnDoubles, d1, d2);
+        if (awaitingDecision) {
+          // landing will finalize turn after the player chooses in the modal
+          return;
+        }
         }
 
-        // Doubles = extra turn (only in normal movement, not leaving jail)
-        if (allowExtraTurnOnDoubles && d1 !== null && d2 !== null && d1 === d2) {
-          showInfoModal(`${player.name} rolled doubles and gets another turn!`);
-          updateCurrentTurnDisplay();
-        } else {
-          advanceToNextPlayer();
-        }
-
-        renderBoard();
-        updateHoldingsPanel();
-        populateTradeOtherPlayers();
-        populateTradePropertyLists();
+        finalizeAfterLanding(allowExtraTurnOnDoubles, d1, d2);
       }, LANDING_PAUSE_MS);
 
       return;
@@ -4296,7 +4525,11 @@ function performMovementAndLanding(
 
   // Safety: if somehow there are no steps, just handle landing immediately
   if (path.length === 0) {
-    handleLanding(player, passedGo);
+    const awaitingDecision = handleLanding(player, passedGo, allowExtraTurnOnDoubles, d1, d2);
+        if (awaitingDecision) {
+          // landing will finalize turn after the player chooses in the modal
+          return;
+        }
     return;
   }
 
@@ -4340,6 +4573,12 @@ function startPostJailRoll(playerIdx) {
   const d1 = Math.floor(Math.random() * 6) + 1;
   const d2 = Math.floor(Math.random() * 6) + 1;
   const rollTotal = d1 + d2;
+    lastD1 = d1;
+    lastD2 = d2;
+    if (isOnlineHost()) {
+      try { socket.emit("diceRoll", { d1, d2, total: rollTotal, playerSeat: currentIdx }); } catch(_) {}
+    }
+
   lastRollTotal = rollTotal;
 
   if (diceResultEl) {
@@ -4374,6 +4613,12 @@ if (auctionPassBtn) auctionPassBtn.addEventListener("click", handleAuctionPass);
 
 if (rollBtn) {
   rollBtn.addEventListener("click", () => {
+    if (isOnlineGuest()) {
+      // Request host to roll for you (host-authoritative)
+      socket.emit("requestAction", { type: "ROLL", payload: null });
+      return;
+    }
+
     if (!turnOrder.length) {
       showInfoModal("Start the game from the setup screen before rolling.");
       return;
@@ -4400,6 +4645,12 @@ if (rollBtn) {
     const d1 = Math.floor(Math.random() * 6) + 1;
     const d2 = Math.floor(Math.random() * 6) + 1;
     const rollTotal = d1 + d2;
+    lastD1 = d1;
+    lastD2 = d2;
+    if (isOnlineHost()) {
+      try { socket.emit("diceRoll", { d1, d2, total: rollTotal, playerSeat: currentIdx }); } catch(_) {}
+    }
+
     lastRollTotal = rollTotal;
 
     if (diceResultEl) {
@@ -4458,6 +4709,11 @@ if (rollBtn) {
 
 if (endTurnBtn) {
   endTurnBtn.addEventListener("click", () => {
+    if (isOnlineGuest()) {
+      socket.emit("requestAction", { type: "END_TURN", payload: null });
+      return;
+    }
+
     // No game yet
     if (!turnOrder || !turnOrder.length) {
       showInfoModal(

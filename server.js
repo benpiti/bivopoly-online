@@ -127,7 +127,18 @@ io.on("connection",(socket)=>{
     io.to(code).emit("hostState", snapshot);
   });
 
-  socket.on("requestAction",({type, payload})=>{
+  
+  // Host broadcasts dice results so guests can animate dice consistently
+  socket.on("diceRoll", ({ d1, d2, total, playerSeat }) => {
+    const code = socket.data.roomCode;
+    if (!code) return;
+    const room = rooms.get(code);
+    if (!room) return;
+    if (room.hostId !== socket.id) return;
+    io.to(code).emit("diceRoll", { d1, d2, total, playerSeat });
+  });
+
+socket.on("requestAction",({type, payload})=>{
     const code=socket.data.roomCode;
     if(!code) return;
     const room=rooms.get(code); if(!room) return;
