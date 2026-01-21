@@ -924,6 +924,27 @@ const COLOR_MAP = {
 
 const setupScreen        = document.getElementById("setupScreen");
 const startGameBtn       = document.getElementById("startGameBtn");
+const playOnlineBtn      = document.getElementById("playOnlineBtn");
+const onlineOverlay      = document.getElementById("onlineOverlay");
+
+// Online UI (only shown when Play Online Game is clicked)
+const onlineNameInput       = document.getElementById("onlineNameInput");
+const onlineColorSelect     = document.getElementById("onlineColorSelect");
+const onlineColorDot        = document.getElementById("onlineColorDot");
+const onlineColorValue      = document.getElementById("onlineColorValue");
+const createRoomBtn         = document.getElementById("createRoomBtn");
+const joinRoomBtn           = document.getElementById("joinRoomBtn");
+const joinCodeInput         = document.getElementById("joinCodeInput");
+const onlineErrorEl         = document.getElementById("onlineError");
+const onlineStep1           = document.getElementById("onlineStep1");
+const onlineLobby           = document.getElementById("onlineLobby");
+const roomCodeDisplay       = document.getElementById("roomCodeDisplay");
+const copyRoomCodeBtn       = document.getElementById("copyRoomCodeBtn");
+const onlinePlayersList     = document.getElementById("onlinePlayersList");
+const onlineStatus          = document.getElementById("onlineStatus");
+const leaveRoomBtn          = document.getElementById("leaveRoomBtn");
+const startOnlineGameBtn    = document.getElementById("startOnlineGameBtn");
+const closeOnlineOverlayBtn = document.getElementById("closeOnlineOverlayBtn");
 const setupHint          = document.getElementById("setupHint");
 const rollBtn            = document.getElementById("rollBtn");
 const tradeBtn           = document.getElementById("tradeBtn");
@@ -1260,6 +1281,294 @@ function populateColorDropdowns() {
 }
 
 populateColorDropdowns();
+
+// =====================
+// ONLINE UI (Lobby + Room Code)
+// =====================
+
+// Socket.IO client is optional; if you're opening index.html directly (file://)
+// then `io` won't exist and online play won't be available.
+let socket = null;
+try {
+  if (typeof io !== "undefined") {
+    socket = io();
+  }
+} catch (_) {
+  socket = null;
+}
+
+let onlineState = {
+  code: null,
+  seat: null,
+  isHost: false,
+  players: [],
+  myName: "",
+  myColorName: "Orange"
+};
+
+function showOnlineError(msg) {
+  if (!onlineErrorEl) return;
+  onlineErrorEl.textContent = msg;
+  onlineErrorEl.style.display = msg ? "block" : "none";
+}
+
+function openOnlineOverlay() {
+  if (!onlineOverlay) return;
+  onlineOverlay.style.display = "flex";
+  showOnlineError("");
+  if (onlineStep1) onlineStep1.style.display = "block";
+  if (onlineLobby) onlineLobby.style.display = "none";
+  if (onlineStatus) onlineStatus.textContent = socket ? "Connected" : "No server (online disabled)";
+}
+
+function closeOnlineOverlay() {
+  if (!onlineOverlay) return;
+  onlineOverlay.style.display = "none";
+  showOnlineError("");
+}
+
+function normalizeCode(raw) {
+  return String(raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+}
+
+function setOnlineColorPreview(colorName) {
+  const hex = COLOR_MAP[colorName] || COLOR_MAP.Orange;
+  if (onlineColorDot) onlineColorDot.style.backgroundColor = hex;
+  if (onlineColorValue) {
+    onlineColorValue.textContent = colorName;
+    onlineColorValue.style.color = hex;
+  }
+}
+
+function populateOnlineColorSelect() {
+  if (!onlineColorSelect) return;
+  onlineColorSelect.innerHTML = "";
+  Object.keys(COLOR_MAP).forEach((name) => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    onlineColorSelect.appendChild(opt);
+  });
+  onlineColorSelect.value = onlineState.myColorName;
+  setOnlineColorPreview(onlineState.myColorName);
+}
+
+populateOnlineColorSelect();
+
+if (onlineColorSelect) {
+  onlineColorSelect.addEventListener("change", () => {
+    onlineState.myColorName = onlineColorSelect.value;
+    setOnlineColorPreview(onlineState.myColorName);
+    // Tell server (if in a room)
+    if (socket && onlineState.code) {
+      socket.emit("setColor", { color: onlineState.myColorName });
+    }
+  });
+}
+
+function renderOnlinePlayersList(players) {
+  if (!onlinePlayersList) return;
+  if (!players || !players.length) {
+    onlinePlayersList.innerHTML = "<p style='opacity:0.75; margin:0;'>No players yet.</p>";
+    return;
+  }
+
+  const rows = players
+    .slice()
+    .sort((a, b) => (a.seat ?? 0) - (b.seat ?? 0))
+    .map((p) => {
+      const name = escapeHtml(p.name || `Player ${Number(p.seat) + 1}`);
+      const cName = p.colorName || "";
+      const hex = COLOR_MAP[cName] || "#ffffff";
+      const badge = p.isHost ? "<span class='online-badge'>Host</span>" : "";
+      return `
+        <div class="online-player-row">
+          <div class="online-player-left">
+            <span class="online-color-dot" style="background:${hex}"></span>
+            <span class="online-player-name">${name}</span>
+            ${badge}
+          </div>
+          <div class="online-player-right">Seat ${Number(p.seat) + 1}</div>
+        </div>
+      `;
+    })
+    .join("");
+
+  onlinePlayersList.innerHTML = rows;
+}
+
+function enterOnlineLobby({ code, seat, isHost, players }) {
+  onlineState.code = code;
+  onlineState.seat = seat;
+  onlineState.isHost = !!isHost;
+  onlineState.players = Array.isArray(players) ? players : [];
+
+  if (roomCodeDisplay) roomCodeDisplay.textContent = code || "—";
+  if (onlineStep1) onlineStep1.style.display = "none";
+  if (onlineLobby) onlineLobby.style.display = "block";
+  if (startOnlineGameBtn) startOnlineGameBtn.style.display = onlineState.isHost ? "inline-block" : "none";
+  renderOnlinePlayersList(onlineState.players);
+  showOnlineError("");
+
+  // Keep the server updated with our chosen color
+  if (socket && onlineState.code) {
+    socket.emit("setColor", { color: onlineState.myColorName });
+  }
+}
+
+function resetOnlineStateUI() {
+  onlineState.code = null;
+  onlineState.seat = null;
+  onlineState.isHost = false;
+  onlineState.players = [];
+  if (roomCodeDisplay) roomCodeDisplay.textContent = "—";
+  if (onlineLobby) onlineLobby.style.display = "none";
+  if (onlineStep1) onlineStep1.style.display = "block";
+  if (startOnlineGameBtn) startOnlineGameBtn.style.display = "none";
+  renderOnlinePlayersList([]);
+  showOnlineError("");
+}
+
+function applyOnlinePlayersToSetup(players) {
+  // Convert server players list into local setup inputs, then click Start Game.
+  const list = (players || []).slice().sort((a, b) => (a.seat ?? 0) - (b.seat ?? 0));
+  const count = Math.min(4, Math.max(2, list.length || 2));
+
+  if (numPlayersSelect) {
+    numPlayersSelect.value = String(count);
+    updateVisiblePlayerCards();
+  }
+
+  for (let i = 0; i < count; i++) {
+    const p = list[i] || { name: `Player ${i + 1}`, colorName: Object.keys(COLOR_MAP)[i] };
+    if (playerNameInputs[i]) playerNameInputs[i].value = p.name || `Player ${i + 1}`;
+    if (colorSelects[i]) {
+      const desired = p.colorName && COLOR_MAP[p.colorName] ? p.colorName : (Object.keys(COLOR_MAP)[i] || "Orange");
+      colorSelects[i].value = desired;
+      // Trigger the existing change listener so dots/players[] update
+      colorSelects[i].dispatchEvent(new Event("change"));
+    }
+  }
+
+  validateSetup();
+
+  // Start the game using the normal Start Game button logic.
+  if (startGameBtn) startGameBtn.click();
+}
+
+// Open/close overlay
+if (playOnlineBtn) {
+  playOnlineBtn.addEventListener("click", () => {
+    // Default the online name to Player 1 name if present
+    if (onlineNameInput && playerNameInputs[0] && playerNameInputs[0].value.trim()) {
+      onlineNameInput.value = playerNameInputs[0].value.trim();
+    }
+    populateOnlineColorSelect();
+    openOnlineOverlay();
+  });
+}
+
+if (closeOnlineOverlayBtn) {
+  closeOnlineOverlayBtn.addEventListener("click", () => closeOnlineOverlay());
+}
+
+// Create / Join
+if (createRoomBtn) {
+  createRoomBtn.addEventListener("click", () => {
+    if (!socket) {
+      showOnlineError("Online mode requires running the server (node server.js). If you opened the HTML directly, it won't work.");
+      return;
+    }
+    const name = (onlineNameInput && onlineNameInput.value.trim()) ? onlineNameInput.value.trim() : "Host";
+    onlineState.myName = name;
+    socket.emit("createRoom", { name, color: onlineState.myColorName });
+  });
+}
+
+if (joinRoomBtn) {
+  joinRoomBtn.addEventListener("click", () => {
+    if (!socket) {
+      showOnlineError("Online mode requires running the server (node server.js). If you opened the HTML directly, it won't work.");
+      return;
+    }
+    const name = (onlineNameInput && onlineNameInput.value.trim()) ? onlineNameInput.value.trim() : "Player";
+    const code = normalizeCode(joinCodeInput ? joinCodeInput.value : "");
+    if (!code) {
+      showOnlineError("Enter a room code.");
+      return;
+    }
+    onlineState.myName = name;
+    socket.emit("joinRoom", { code, name, color: onlineState.myColorName });
+  });
+}
+
+if (copyRoomCodeBtn) {
+  copyRoomCodeBtn.addEventListener("click", async () => {
+    const code = onlineState.code || "";
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      if (onlineStatus) onlineStatus.textContent = "Copied!";
+      setTimeout(() => {
+        if (onlineStatus) onlineStatus.textContent = socket ? "Connected" : "No server";
+      }, 900);
+    } catch (_) {
+      // no-op
+    }
+  });
+}
+
+if (leaveRoomBtn) {
+  leaveRoomBtn.addEventListener("click", () => {
+    // easiest: full reload resets socket room
+    window.location.reload();
+  });
+}
+
+if (startOnlineGameBtn) {
+  startOnlineGameBtn.addEventListener("click", () => {
+    if (!socket || !onlineState.isHost || !onlineState.code) return;
+    socket.emit("startGame", { code: onlineState.code });
+  });
+}
+
+// Socket events
+if (socket) {
+  socket.on("connect", () => {
+    if (onlineStatus) onlineStatus.textContent = "Connected";
+  });
+
+  socket.on("disconnect", () => {
+    if (onlineStatus) onlineStatus.textContent = "Disconnected";
+  });
+
+  socket.on("roomError", (msg) => {
+    showOnlineError(String(msg || "Room error"));
+  });
+
+  socket.on("roomJoined", (payload) => {
+    if (!payload) return;
+    enterOnlineLobby(payload);
+  });
+
+  socket.on("roomUpdate", (payload) => {
+    if (!payload) return;
+    if (payload.code && roomCodeDisplay) roomCodeDisplay.textContent = payload.code;
+    onlineState.players = Array.isArray(payload.players) ? payload.players : [];
+    renderOnlinePlayersList(onlineState.players);
+    if (typeof payload.started === "boolean" && payload.started) {
+      // In case a player refreshes after the host starts
+      applyOnlinePlayersToSetup(onlineState.players);
+      closeOnlineOverlay();
+    }
+  });
+
+  socket.on("gameStarted", (payload) => {
+    const list = payload && Array.isArray(payload.players) ? payload.players : onlineState.players;
+    applyOnlinePlayersToSetup(list);
+    closeOnlineOverlay();
+  });
+}
 
 // =====================
 // POPULATE HOME DROPDOWNS
@@ -4236,405 +4545,3 @@ renderPropertyInfo(null);
 updateHoldingsPanel();
 setupTradePanel();
 updateBankSupplyUI();
-
-
-
-// ===============================
-// BIVOPOLY ONLINE MODULE (HOST-AUTH)
-// ===============================
-// This module makes the host authoritative.
-// Host runs all game logic. Guests send requests.
-// Host sends full snapshots to sync everyone.
-
-const ONLINE = {
-  socket: null,
-  connected: false,
-  roomCode: null,
-  seat: null,
-  isHost: false,
-  players: [],
-  started: false,
-  colorBySeat: {}
-};
-
-const onlineLobbyOverlayEl = document.getElementById("onlineLobbyOverlay");
-const onlineLobbyCloseBtnEl = document.getElementById("onlineLobbyCloseBtn");
-const onlineNameInputEl = document.getElementById("onlineNameInput");
-const onlineCreateRoomBtnEl = document.getElementById("onlineCreateRoomBtn");
-const onlineJoinCodeInputEl = document.getElementById("onlineJoinCodeInput");
-const onlineJoinRoomBtnEl = document.getElementById("onlineJoinRoomBtn");
-const onlineRoomInfoEl = document.getElementById("onlineRoomInfo");
-const onlineRoomCodeTextEl = document.getElementById("onlineRoomCodeText");
-const onlinePlayersListEl = document.getElementById("onlinePlayersList");
-const onlineHostRulesEl = document.getElementById("onlineHostRules");
-const onlineStartBtnEl = document.getElementById("onlineStartBtn");
-const onlineLobbyStatusEl = document.getElementById("onlineLobbyStatus");
-
-// Host rule controls
-const ruleUnlimitedHousesEl = document.getElementById("ruleUnlimitedHouses");
-const ruleAuctionModeEl = document.getElementById("ruleAuctionMode");
-const ruleFreeParkingJackpotEl = document.getElementById("ruleFreeParkingJackpot");
-const ruleEvenHouseBuildEl = document.getElementById("ruleEvenHouseBuild");
-const ruleStartingMoneyEl = document.getElementById("ruleStartingMoney");
-
-// Color picker overlay
-const onlineColorOverlayEl = document.getElementById("onlineColorOverlay");
-const onlineColorSubtitleEl = document.getElementById("onlineColorSubtitle");
-const onlineColorChoicesEl = document.getElementById("onlineColorChoices");
-
-// map from color name (in your COLOR_MAP select list) to same name
-const COLOR_NAMES = Object.keys(COLOR_MAP);
-
-function setOnlineStatus(msg) {
-  if (onlineLobbyStatusEl) onlineLobbyStatusEl.textContent = msg;
-}
-
-function showLobby() {
-  if (onlineLobbyOverlayEl) onlineLobbyOverlayEl.style.display = "flex";
-}
-function hideLobby() {
-  if (onlineLobbyOverlayEl) onlineLobbyOverlayEl.style.display = "none";
-}
-
-function renderOnlinePlayers(list) {
-  ONLINE.players = Array.isArray(list) ? list.slice() : [];
-  if (!onlinePlayersListEl) return;
-  onlinePlayersListEl.innerHTML = "";
-  const sorted = ONLINE.players.slice().sort((a,b)=> (a.seat??0)-(b.seat??0));
-  sorted.forEach(p=>{
-    const row=document.createElement("div");
-    row.className="online-player-row";
-    const left=document.createElement("div");
-    left.textContent = `${p.name}`;
-    const right=document.createElement("div");
-    right.className="online-player-badge";
-    right.textContent = p.isHost ? "Host" : `Seat ${p.seat+1}`;
-    row.appendChild(left);
-    row.appendChild(right);
-    onlinePlayersListEl.appendChild(row);
-  });
-
-  // Host can start when 2+ players
-  if (onlineStartBtnEl) {
-    const canStart = ONLINE.isHost && sorted.length >= 2;
-    onlineStartBtnEl.style.display = canStart ? "block" : "none";
-    onlineStartBtnEl.disabled = !canStart;
-  }
-}
-
-function applyHostRulesToGame() {
-  // Apply to existing rules object in your game
-  rules.unlimitedHouses = !!ruleUnlimitedHousesEl?.checked;
-  rules.auctionMode = !!ruleAuctionModeEl?.checked;
-  rules.freeParkingJackpot = !!ruleFreeParkingJackpotEl?.checked;
-  rules.evenHouseBuild = !!ruleEvenHouseBuildEl?.checked;
-  const money = Number(ruleStartingMoneyEl?.value);
-  rules.startingMoney = Number.isFinite(money) ? money : 1500;
-}
-
-function initGameFromLobbyPlayers(lobbyPlayers) {
-  const sorted = (Array.isArray(lobbyPlayers) ? lobbyPlayers : []).slice().sort((a,b)=> (a.seat??0)-(b.seat??0));
-  const count = Math.max(2, Math.min(4, sorted.length));
-
-  // Resize players array to count, preserving shape
-  players = sorted.slice(0, count).map((p, i) => ({
-    id: i,
-    name: String(p.name || `Player ${i+1}`).slice(0,15),
-    position: 0,
-    money: rules.startingMoney,
-    inJail: false,
-    jailTurns: 0,
-    getOutOfJailCards: 0,
-    color: null,
-    home: null,
-    active: false,
-    properties: []
-  }));
-
-  // Reset board ownership/buildings
-  board.forEach(t=>{
-    if (t && typeof t === "object") {
-      if ("owner" in t) t.owner = null;
-      if ("houses" in t) t.houses = 0;
-      if ("hotel" in t) t.hotel = false;
-      if ("mortgaged" in t) t.mortgaged = false;
-    }
-  });
-
-  // Turn order: 0..count-1
-  turnOrder = Array.from({length: count}, (_,i)=>i);
-  currentTurnPointer = 0;
-  players.forEach(p=>p.active=false);
-  players[turnOrder[currentTurnPointer]].active=true;
-
-  // Update UI
-  if (currentTurnDisplay) currentTurnDisplay.textContent = `Current Turn: ${players[turnOrder[currentTurnPointer]].name}`;
-  renderBoard();
-  updateMoneyUI();
-}
-
-function buildSnapshot() {
-  return {
-    players,
-    board,
-    turnOrder,
-    currentTurnPointer,
-    rules,
-    online: {
-      roomCode: ONLINE.roomCode
-    }
-  };
-}
-
-function applySnapshot(snap) {
-  if (!snap) return;
-  if (snap.rules) {
-    // shallow copy into rules to keep reference stable
-    Object.assign(rules, snap.rules);
-  }
-  if (Array.isArray(snap.players)) players = snap.players;
-  if (Array.isArray(snap.board)) {
-    // replace board entries by index
-    for (let i=0;i<snap.board.length;i++) board[i] = snap.board[i];
-  }
-  if (Array.isArray(snap.turnOrder)) turnOrder = snap.turnOrder;
-  if (typeof snap.currentTurnPointer === "number") currentTurnPointer = snap.currentTurnPointer;
-
-  // refresh UI
-  const activeIdx = turnOrder && turnOrder.length ? turnOrder[currentTurnPointer] : 0;
-  if (players && players[activeIdx] && currentTurnDisplay) {
-    currentTurnDisplay.textContent = `Current Turn: ${players[activeIdx].name}`;
-  }
-  renderBoard();
-  updateMoneyUI();
-}
-
-function broadcastSnapshot() {
-  if (!ONLINE.isHost || !ONLINE.socket || !ONLINE.connected) return;
-  ONLINE.socket.emit("hostState", buildSnapshot());
-}
-
-// Guests request actions; host executes local button clicks
-function requestAction(type, payload=null) {
-  if (!ONLINE.socket || !ONLINE.connected) return;
-  ONLINE.socket.emit("requestAction", { type, payload });
-}
-
-function hookGuestButtons() {
-  if (ONLINE.isHost) return;
-
-  // Disable direct action buttons; guests request actions instead
-  if (rollBtn) {
-    rollBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      requestAction("ROLL");
-    }, true);
-  }
-
-  if (endTurnBtn) {
-    endTurnBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      requestAction("END_TURN");
-    }, true);
-  }
-
-  if (bankruptBtn) {
-    bankruptBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      requestAction("BANKRUPT");
-    }, true);
-  }
-}
-
-function hookHostActionReceiver() {
-  if (!ONLINE.socket) return;
-  ONLINE.socket.on("hostAction", ({ type }) => {
-    if (!ONLINE.isHost) return;
-
-    // Only host executes real game logic
-    if (type === "ROLL" && rollBtn) rollBtn.click();
-    if (type === "END_TURN" && endTurnBtn) endTurnBtn.click();
-    if (type === "BANKRUPT" && bankruptBtn) bankruptBtn.click();
-
-    // After any host action, snapshot
-    setTimeout(broadcastSnapshot, 0);
-  });
-}
-
-function showColorPickerIfNeeded() {
-  if (!onlineColorOverlayEl || !onlineColorChoicesEl) return;
-  if (!ONLINE.started) return;
-
-  // If my player already has a color, don't show
-  if (players && players[ONLINE.seat] && players[ONLINE.seat].color) return;
-
-  onlineColorOverlayEl.style.display = "flex";
-  onlineColorChoicesEl.innerHTML = "";
-
-  // Determine taken colors by reading players colors (host-synced)
-  const taken = new Set((players||[]).map(p => p?.colorName || p?.color).filter(Boolean));
-
-  COLOR_NAMES.forEach((name) => {
-    const btn = document.createElement("button");
-    btn.className = "online-color-btn";
-    btn.type = "button";
-
-    const sw = document.createElement("span");
-    sw.className = "online-color-swatch";
-    sw.style.background = COLOR_MAP[name];
-
-    const label = document.createElement("span");
-    label.textContent = name;
-
-    btn.appendChild(sw);
-    btn.appendChild(label);
-
-    btn.disabled = taken.has(name);
-
-    btn.addEventListener("click", () => {
-      if (!ONLINE.socket || !ONLINE.connected) return;
-      ONLINE.socket.emit("chooseColor", { seat: ONLINE.seat, colorName: name });
-    });
-
-    onlineColorChoicesEl.appendChild(btn);
-  });
-}
-
-function applyColorOnHost(seat, colorName) {
-  const idx = Number(seat);
-  if (!Number.isFinite(idx)) return;
-  if (!players || !players[idx]) return;
-  players[idx].color = COLOR_MAP[colorName] || players[idx].color;
-  // store name too (helps taken checks)
-  players[idx].colorName = colorName;
-  renderBoard();
-  updateMoneyUI();
-}
-
-function initOnlineNetworking() {
-  if (typeof io === "undefined") {
-    setOnlineStatus("Socket.IO not loaded. Is the server running?");
-    return;
-  }
-
-  ONLINE.socket = io();
-  setOnlineStatus("Connecting...");
-
-  ONLINE.socket.on("connect", () => {
-    ONLINE.connected = true;
-    setOnlineStatus("Connected. Create or join a room.");
-  });
-
-  ONLINE.socket.on("disconnect", () => {
-    ONLINE.connected = false;
-    setOnlineStatus("Disconnected. Refresh after restarting server.");
-    showLobby();
-  });
-
-  ONLINE.socket.on("roomError", (msg) => setOnlineStatus(String(msg)));
-
-  ONLINE.socket.on("roomJoined", ({ code, seat, isHost, players: list }) => {
-    ONLINE.roomCode = code;
-    ONLINE.seat = seat;
-    ONLINE.isHost = !!isHost;
-
-    if (onlineRoomInfoEl) onlineRoomInfoEl.style.display = "block";
-    if (onlineRoomCodeTextEl) onlineRoomCodeTextEl.textContent = code;
-
-    if (onlineHostRulesEl) onlineHostRulesEl.style.display = ONLINE.isHost ? "block" : "none";
-
-    renderOnlinePlayers(list);
-    setOnlineStatus(ONLINE.isHost ? "You are the host. Invite others with the room code." : "Joined! Waiting for host.");
-    hookGuestButtons();
-    hookHostActionReceiver();
-  });
-
-  ONLINE.socket.on("roomUpdate", ({ code, players: list }) => {
-    if (code) ONLINE.roomCode = code;
-    renderOnlinePlayers(list);
-  });
-
-  // This event tells everyone to leave the lobby and get ready
-  ONLINE.socket.on("onlineStartGame", ({ players: lobbyPlayers }) => {
-    hideLobby();
-
-    // Guests do not init; they wait for snapshots
-    if (!ONLINE.isHost) {
-      ONLINE.started = true;
-      setOnlineStatus("Game starting... waiting for host state.");
-      return;
-    }
-
-    // Host initializes game
-    applyHostRulesToGame();
-    initGameFromLobbyPlayers(lobbyPlayers);
-    ONLINE.started = true;
-
-    // send first snapshot immediately
-    broadcastSnapshot();
-
-    // show color picker for everyone
-    showColorPickerIfNeeded();
-  });
-
-  ONLINE.socket.on("hostState", (snap) => {
-    if (ONLINE.isHost) return;
-    hideLobby();
-    applySnapshot(snap);
-    ONLINE.started = true;
-    showColorPickerIfNeeded();
-  });
-
-  ONLINE.socket.on("colorChosen", ({ seat, colorName }) => {
-    // Host applies and snapshots; guests just wait for snapshot to include it
-    if (ONLINE.isHost) {
-      applyColorOnHost(seat, colorName);
-      broadcastSnapshot();
-    }
-    // Guests: if their seat got color, hide picker
-    if (!ONLINE.isHost) {
-      // We'll hide after next snapshot, but can give immediate feedback
-      if (onlineColorSubtitleEl && Number(seat) === Number(ONLINE.seat)) {
-        onlineColorSubtitleEl.textContent = `Locked in: ${colorName}`;
-      }
-    }
-  });
-
-  // UI events
-  if (onlineCreateRoomBtnEl) {
-    onlineCreateRoomBtnEl.addEventListener("click", () => {
-      const name = onlineNameInputEl?.value || "Host";
-      ONLINE.socket.emit("createRoom", { name });
-    });
-  }
-  if (onlineJoinRoomBtnEl) {
-    onlineJoinRoomBtnEl.addEventListener("click", () => {
-      const name = onlineNameInputEl?.value || "Player";
-      const code = onlineJoinCodeInputEl?.value || "";
-      ONLINE.socket.emit("joinRoom", { code, name });
-    });
-  }
-  if (onlineStartBtnEl) {
-    onlineStartBtnEl.addEventListener("click", () => {
-      if (!ONLINE.isHost) return;
-      if (!ONLINE.roomCode) return;
-      // Tell server to broadcast onlineStartGame, and host will init
-      ONLINE.socket.emit("hostStartOnlineGame");
-      setOnlineStatus("Starting game...");
-    });
-  }
-  if (onlineLobbyCloseBtnEl) {
-    onlineLobbyCloseBtnEl.addEventListener("click", () => {
-      hideLobby();
-    });
-  }
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-  // Always show lobby first for online version
-  showLobby();
-  initOnlineNetworking();
-});

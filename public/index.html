@@ -228,13 +228,87 @@
           </div>
         </div>
 
-        <button id="startGameBtn" class="primary-btn">
-          Start Game
-        </button>
+        <div style="display:flex; justify-content:center; gap:12px; flex-wrap:wrap; margin-top: 6px;">
+          <button id="startGameBtn" class="primary-btn">
+            Start Game
+          </button>
+
+          <!-- Online mode UI only appears when this is clicked -->
+          <button id="playOnlineBtn" class="secondary-btn">
+            Play Online Game
+          </button>
+        </div>
 
         <p id="setupHint" class="setup-hint">
           Choose unique colors for all selected players.
         </p>
+      </div>
+    </div>
+
+    <!-- ONLINE MODE OVERLAY (hidden until Play Online Game is clicked) -->
+    <div id="onlineOverlay" class="online-overlay" style="display:none;">
+      <div class="online-card">
+        <h2 class="online-title">Play Online</h2>
+        <p class="online-subtitle">
+          Host creates a room code. Other players enter the code to join.
+          Each player chooses their own token color.
+        </p>
+
+        <div id="onlineStep1" class="online-step">
+          <div class="online-row">
+            <label for="onlineNameInput">Your Name</label>
+            <input id="onlineNameInput" class="name-input" maxlength="15" placeholder="Your name" />
+          </div>
+
+          <div class="online-row">
+            <label for="onlineColorSelect">Your Color</label>
+            <select id="onlineColorSelect" class="field-select"></select>
+            <div class="color-preview-row" style="justify-content:flex-start;">
+              <span class="color-dot" id="onlineColorDot"></span>
+              <span id="onlineColorValue" class="color-name">Orange</span>
+            </div>
+          </div>
+
+          <div class="online-actions">
+            <button id="createRoomBtn" class="primary-btn">Create Room</button>
+
+            <div class="online-join-inline">
+              <input id="joinCodeInput" class="name-input" maxlength="8" placeholder="Room code" />
+              <button id="joinRoomBtn" class="secondary-btn">Join Room</button>
+            </div>
+          </div>
+
+          <p id="onlineError" class="online-error" style="display:none;"></p>
+        </div>
+
+        <div id="onlineLobby" class="online-step" style="display:none;">
+          <div class="online-lobby-top">
+            <div>
+              <div class="online-code-label">Room Code</div>
+              <div class="online-code" id="roomCodeDisplay">—</div>
+              <button id="copyRoomCodeBtn" class="secondary-btn online-copy-btn">Copy Code</button>
+            </div>
+            <div class="online-status" id="onlineStatus">Connecting…</div>
+          </div>
+
+          <div class="online-row">
+            <div class="online-players-title">Players</div>
+            <div id="onlinePlayersList" class="online-players-list"></div>
+          </div>
+
+          <div class="online-actions" style="justify-content:space-between;">
+            <button id="leaveRoomBtn" class="secondary-btn">Leave</button>
+            <button id="startOnlineGameBtn" class="primary-btn" style="display:none;">Start Online Game</button>
+          </div>
+
+          <p class="online-hint">
+            Host: press <strong>Start Online Game</strong> when everyone has joined.
+          </p>
+        </div>
+
+        <div class="online-footer">
+          <button id="closeOnlineOverlayBtn" class="secondary-btn">Close</button>
+        </div>
       </div>
     </div>
 
@@ -536,77 +610,10 @@
     </div>
   </div>
 
+  <!-- Socket.io client is served automatically by server.js (Express + Socket.io) -->
   <script src="/socket.io/socket.io.js"></script>
-<script src="script.js"></script>
-
-<!-- =====================
-     ONLINE LOBBY OVERLAY
-     ===================== -->
-<div id="onlineLobbyOverlay" class="online-lobby-overlay" style="display:flex;">
-  <div class="online-lobby-card">
-    <div class="online-lobby-header">
-      <div class="online-lobby-title">BIVOPOLY ONLINE</div>
-      <button id="onlineLobbyCloseBtn" class="online-lobby-close" type="button" title="Close">×</button>
-    </div>
-
-    <div class="online-lobby-row">
-      <label class="online-label">Your Name</label>
-      <input id="onlineNameInput" class="online-input" type="text" maxlength="15" placeholder="Olivia" />
-    </div>
-
-    <div class="online-lobby-actions">
-      <button id="onlineCreateRoomBtn" class="online-btn-primary" type="button">Create Room</button>
-      <div class="online-join">
-        <input id="onlineJoinCodeInput" class="online-input" type="text" maxlength="8" placeholder="ROOM CODE" />
-        <button id="onlineJoinRoomBtn" class="online-btn" type="button">Join</button>
-      </div>
-    </div>
-
-    <div id="onlineRoomInfo" class="online-room-info" style="display:none;">
-      <div class="online-room-code">Room Code: <span id="onlineRoomCodeText">------</span></div>
-      <div class="online-players-title">Players</div>
-      <div id="onlinePlayersList" class="online-players-list"></div>
-
-      <div id="onlineHostRules" class="online-host-rules" style="display:none;">
-        <div class="online-rules-title">Host Rules</div>
-
-        <div class="online-rule">
-          <label><input id="ruleUnlimitedHouses" type="checkbox"> Unlimited Houses</label>
-        </div>
-        <div class="online-rule">
-          <label><input id="ruleAuctionMode" type="checkbox"> Auction Mode</label>
-        </div>
-        <div class="online-rule">
-          <label><input id="ruleFreeParkingJackpot" type="checkbox"> Free Parking Jackpot</label>
-        </div>
-        <div class="online-rule">
-          <label><input id="ruleEvenHouseBuild" type="checkbox" checked> Even House Build</label>
-        </div>
-        <div class="online-rule">
-          <label>Starting Money</label>
-          <input id="ruleStartingMoney" class="online-input" type="number" min="0" step="50" value="1500" />
-        </div>
-      </div>
-
-      <button id="onlineStartBtn" class="online-btn-primary" type="button" style="display:none; margin-top:12px;">
-        Start Online Game
-      </button>
-    </div>
-
-    <div id="onlineLobbyStatus" class="online-status">Not connected.</div>
-  </div>
-</div>
-
-<!-- =====================
-     ONLINE COLOR PICKER
-     ===================== -->
-<div id="onlineColorOverlay" class="online-color-overlay" style="display:none;">
-  <div class="online-color-card">
-    <div class="online-color-title">Choose Your Color</div>
-    <div id="onlineColorSubtitle" class="online-color-subtitle">Pick a color that no one else has chosen.</div>
-    <div id="onlineColorChoices" class="online-color-choices"></div>
-  </div>
-</div>
-
+  <!-- Socket.IO client (served by server.js). Safe if running locally without server. -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
