@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Bivopoly</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <button id="openLobbyBtn" class="online-pill" type="button" style="display:none;">
+        Room: <span id="openLobbyCode">------</span>
+      </button>
+      <h1 class="logo">BIVOPOLY</h1>
+      <p class="tagline">Custom Monopoly for Up to Four Players</p>
+    </header>
+
+
+    <!-- ONLINE LOBBY OVERLAY -->
+    <div id="onlineLobby" class="lobby-overlay">
+      <div class="lobby-card">
+        <button id="closeLobbyBtn" class="lobby-close" type="button" aria-label="Close lobby" style="display:none;">×</button>
+        <h2 class="lobby-title">Play Online</h2>
+        <p class="lobby-subtitle">Host a room or join with a code.</p>
+
+        <div class="lobby-row">
+          <label for="lobbyName">Your name</label>
+          <input id="lobbyName" class="name-input" type="text" maxlength="15" placeholder="Olivia" />
+        </div>
+
+        <div class="lobby-actions">
+          <button id="createRoomBtn" class="primary-btn">Create Room</button>
+          <div class="join-group">
+            <input id="joinCodeInput" class="name-input" type="text" maxlength="8" placeholder="ROOM CODE" />
+            <button id="joinRoomBtn" class="secondary-btn">Join</button>
+          </div>
+        </div>
+
+        <div id="lobbyStatus" class="lobby-status"></div>
+
+        <div id="roomInfo" class="room-info" style="display:none;">
+          <div class="room-code-row">
+            <span class="room-code-label">Room Code</span>
+            <span id="roomCodeText" class="room-code">------</span>
+            <button id="copyRoomCodeBtn" class="secondary-btn" type="button">Copy</button>
+          </div>
+          <div class="room-players">
+            <div class="room-players-title">Players</div>
+            <ul id="roomPlayersList" class="room-players-list"></ul>
+          </div>
+          <p class="room-hint">Host: configure setup and press <b>Start Game</b>. Non-hosts will sync automatically.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETUP OVERLAY -->
+        <!-- SETUP OVERLAY -->
+    <div id="setupScreen" class="setup-overlay">
+      <div class="setup-card">
+        <h2 class="setup-title">Game Setup</h2>
+        <p class="setup-subtitle">
+          Choose the number of players (2–4). Customize names, colors, and home spaces.
+          If a name is left blank, a default name (Player #) will be used.
+        </p>
+
+        <!-- NEW: two-column main layout -->
+        <div class="setup-main">
+          <!-- LEFT: Number of players + player setup -->
+          <div class="setup-main-left">
+            <!-- Number of Players Selector -->
+            <div class="field-group" style="margin-bottom: 10px;">
+              <label for="numPlayersSelect" style="font-weight: bold;">Number of Players</label>
+              <select id="numPlayersSelect" class="field-select">
+                <option value="2">2 Players</option>
+                <option value="3">3 Players</option>
+                <option value="4" selected>4 Players</option>
+              </select>
+            </div>
+
+            <!-- Spacer -->
+            <div style="height: 10px;"></div>
+
+            <!-- Four player setup blocks: name + color + home in one box -->
+            <div class="setup-grid">
+
+              <!-- Player 1 Setup -->
+              <div class="player-setup" data-player-index="0">
+                <h3 class="player-title">Player 1</h3>
+
+                <div class="field-group">
+                  <label for="player1NameInput">Name</label>
+                  <input
+                    id="player1NameInput"
+                    type="text"
+                    placeholder="Player 1"
+                    maxlength="15"
+                    class="name-input"
+                  />
+                </div>
+
+                <div class="field-group">
+                  <label for="player1ColorSelect">Color</label>
+                  <select id="player1ColorSelect" class="field-select"></select>
+                  <div class="color-preview-row">
+                    <span class="color-dot" id="p1ColorDot"></span>
+                    <span id="player1ColorValue" class="color-name">Orange</span>
+                  </div>
+                </div>
+
+                <div class="field-group">
+                  <label for="player1HomeSelect">Home Space</label>
+                  <select id="player1HomeSelect" class="field-select"></select>
+                </div>
+              </div>
+
+              <!-- Player 2 Setup -->
+              <div class="player-setup" data-player-index="1">
+                <h3 class="player-title">Player 2</h3>
+
+                <div class="field-group">
+                  <label for="player2NameInput">Name</label>
+                  <input
+                    id="player2NameInput"
+                    type="text"
+                    placeholder="Player 2"
+                    maxlength="15"
+                    class="name-input"
+                  />
+                </div>
+
+                <div class="field-group">
+                  <label for="player2ColorSelect">Color</label>
+                  <select id="player2ColorSelect" class="field-select"></select>
+                  <div class="color-preview-row">
+                    <span class="color-dot" id="p2ColorDot"></span>
+                    <span id="player2ColorValue" class="color-name">Purple</span>
+                  </div>
+                </div>
+
+                <div class="field-group">
+                  <label for="player2HomeSelect">Home Space</label>
+                  <select id="player2HomeSelect" class="field-select"></select>
+                </div>
+              </div>
+
+              <!-- Player 3 Setup -->
+              <div class="player-setup" data-player-index="2">
+                <h3 class="player-title">Player 3</h3>
+
+                <div class="field-group">
+                  <label for="player3NameInput">Name</label>
+                  <input
+                    id="player3NameInput"
+                    type="text"
+                    placeholder="Player 3"
+                    maxlength="15"
+                    class="name-input"
+                  />
+                </div>
+
+                <div class="field-group">
+                  <label for="player3ColorSelect">Color</label>
+                  <select id="player3ColorSelect" class="field-select"></select>
+                  <div class="color-preview-row">
+                    <span class="color-dot" id="p3ColorDot"></span>
+                    <span id="player3ColorValue" class="color-name">Blue</span>
+                  </div>
+                </div>
+
+                <div class="field-group">
+                  <label for="player3HomeSelect">Home Space</label>
+                  <select id="player3HomeSelect" class="field-select"></select>
+                </div>
+              </div>
+
+              <!-- Player 4 Setup -->
+              <div class="player-setup" data-player-index="3">
+                <h3 class="player-title">Player 4</h3>
+
+                <div class="field-group">
+                  <label for="player4NameInput">Name</label>
+                  <input
+                    id="player4NameInput"
+                    type="text"
+                    placeholder="Player 4"
+                    maxlength="15"
+                    class="name-input"
+                  />
+                </div>
+
+                <div class="field-group">
+                  <label for="player4ColorSelect">Color</label>
+                  <select id="player4ColorSelect" class="field-select"></select>
+                  <div class="color-preview-row">
+                    <span class="color-dot" id="p4ColorDot"></span>
+                    <span id="player4ColorValue" class="color-name">Red</span>
+                  </div>
+                </div>
+
+                <div class="field-group">
+                  <label for="player4HomeSelect">Home Space</label>
+                  <select id="player4HomeSelect" class="field-select"></select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT: Game Rules -->
+          <div class="setup-main-right">
+            <div class="setup-rules-card">
+              <h3 class="rules-title">Game Rules</h3>
+
+              <!-- Unlimited Houses / Hotels -->
+              <label class="toggle-row">
+                <input
+                  type="checkbox"
+                  id="toggleUnlimitedHouses"
+                  class="toggle-checkbox"
+                />
+                <span class="toggle-label">Unlimited Houses / Hotels</span>
+              </label>
+
+              <!-- Auction Mode -->
+              <label class="toggle-row">
+                <input
+                  type="checkbox"
+                  id="toggleAuctionMode"
+                  class="toggle-checkbox"
+                />
+                <span class="toggle-label">
+                  Auction Mode (unbought properties go to auction)
+                </span>
+              </label>
+
+              <!-- Free Parking Jackpot -->
+              <label class="toggle-row">
+                <input
+                  type="checkbox"
+                  id="toggleFreeParkingJackpot"
+                  class="toggle-checkbox"
+                />
+                <span class="toggle-label">Free Parking Jackpot</span>
+              </label>
+
+              <!-- Even Build Rule -->
+              <label class="toggle-row">
+                <input
+                  type="checkbox"
+                  id="toggleEvenBuild"
+                  class="toggle-checkbox"
+                  checked
+                />
+                <span class="toggle-label">Even House Build (Monopoly rule)</span>
+              </label>
+
+              <!-- Starting Money -->
+              <div class="field-group">
+                <label for="startMoneyInput">Starting Money (per player)</label>
+                <input
+                  id="startMoneyInput"
+                  type="number"
+                  class="name-input"
+                  min="0"
+                  step="50"
+                  value="1500"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button id="startGameBtn" class="primary-btn">
+          Start Game
+        </button>
+
+        <p id="setupHint" class="setup-hint">
+          Choose unique colors for all selected players.
+        </p>
+      </div>
+    </div>
+
+
+    <!-- MAIN GAME LAYOUT -->
+    <main class="game-layout">
+      <!-- LEFT: Property Info Panel -->
+      <!-- LEFT COLUMN: Property Info + Holdings + Turn History -->
+      <section class="left-column">
+        <!-- Property Info Panel -->
+        <div class="panel property-panel">
+          <h3 class="panel-title">Property Info</h3>
+          <div id="propertyDetails" class="property-details">
+            <p>Select a property on the board to view its details.</p>
+          </div>
+          <div class="property-buttons-row">
+            <button id="propertyActionBtn1" class="primary-btn btn-green" style="display:none;">
+              Action 1
+            </button>
+            <button id="propertyActionBtn2" class="primary-btn btn-red" style="display:none;">
+              Action 2
+            </button>
+          </div>
+        </div>
+
+        <!-- Turn History / Event Log Panel (separate card) -->
+        <div class="panel panel-large event-log-panel">
+          <div class="event-log-header">
+            <h3>Turn History</h3>
+
+            <div class="event-log-controls">
+              <select id="eventLogFilter" class="field-select event-log-filter">
+                <option value="all" selected>All</option>
+                <option value="money">Money</option>
+                <option value="move">Movement</option>
+                <option value="cards">Cards</option>
+                <option value="trade">Trades</option>
+                <option value="build">Build</option>
+                <option value="jail">Jail</option>
+                <option value="system">System</option>
+              </select>
+
+              <button id="clearEventLogBtn" class="secondary-btn event-log-clear-btn">
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <div id="eventLog" class="event-log-list">
+            <p>No events yet.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- CENTER: Board -->
+      <section id="boardContainer">
+        <div id="board">
+          <!-- Clickable neutral center area to clear the property info panel -->
+          <div id="boardCenterHitbox"></div>
+        </div>
+      </section>
+
+      <!-- RIGHT: Sidebar -->
+      <aside class="sidebar">
+        <div class="panel panel-large">
+          <h3>Turn &amp; Dice</h3>
+          <div id="currentTurnDisplay" class="current-turn">
+            Current Turn: —
+          </div>
+          <div id="turnPhaseDisplay" class="turn-phase">
+            Phase: Ready to Roll
+          </div>
+
+
+          <div class="turn-controls">
+            <button id="rollBtn" class="primary-btn">Roll Dice</button>
+            <button id="tradeBtn" class="secondary-btn trade-btn-inline">Trade</button>
+            <button id="bankruptBtn" class="bankrupt-btn">I DECLARE BANKRUPTCY</button>
+          </div>
+
+          <div id="diceResult" class="dice-result">Roll to begin!</div>
+
+          <div class="turn-controls">
+            <button id="endTurnBtn" class="secondary-btn end-turn-btn">End Turn</button>
+            <button id="seeHoldingsBtn" class="secondary-btn">See Properties</button>
+          </div>
+        </div>
+
+
+        <div class="panel panel-large">
+          <h3>Legend</h3>
+
+          <div class="legend-row">
+            <span class="token token-p1"></span>
+            <div class="legend-text">
+              <span id="legendPlayer1Name">Player 1</span>
+              <span id="legendPlayer1Money" class="legend-money">$1500</span>
+              <span id="legendPlayer1NetWorth" class="legend-networth">NW: $1500</span>
+            </div>
+          </div>
+
+          <div class="legend-row">
+            <span class="token token-p2"></span>
+            <div class="legend-text">
+              <span id="legendPlayer2Name">Player 2</span>
+              <span id="legendPlayer2Money" class="legend-money">$1500</span>
+              <span id="legendPlayer2NetWorth" class="legend-networth">NW: $1500</span>
+            </div>
+          </div>
+
+          <div class="legend-row">
+            <span class="token token-p3"></span>
+            <div class="legend-text">
+              <span id="legendPlayer3Name">Player 3</span>
+              <span id="legendPlayer3Money" class="legend-money">$1500</span>
+              <span id="legendPlayer3NetWorth" class="legend-networth">NW: $1500</span>
+            </div>
+          </div>
+
+          <div class="legend-row">
+            <span class="token token-p4"></span>
+            <div class="legend-text">
+              <span id="legendPlayer4Name">Player 4</span>
+              <span id="legendPlayer4Money" class="legend-money">$1500</span>
+              <span id="legendPlayer4NetWorth" class="legend-networth">NW: $1500</span>
+            </div>
+          </div>
+        </div>
+        <!-- BANK SUPPLY PANEL (under legend) -->
+        <div class="bank-supply">
+          <div class="bank-supply-title">Bank Supply</div>
+          <div class="bank-supply-row">
+            <span>Houses</span>
+            <span class="bank-supply-value" id="bankHousesRemaining">32</span>
+          </div>
+          <div class="bank-supply-row">
+            <span>Hotels</span>
+            <span class="bank-supply-value" id="bankHotelsRemaining">12</span>
+          </div>
+        </div>
+
+
+      </aside>
+    </main>
+  </div>
+
+    <!-- TRADE OVERLAY (like setup overlay, over the whole board) -->
+  <div id="tradePanel" class="trade-overlay">
+    <div class="trade-card">
+      <h2 class="trade-title">Trade</h2>
+
+      <div class="trade-row">
+        <label for="tradeOtherPlayerSelect">Trade with</label>
+        <select id="tradeOtherPlayerSelect"></select>
+      </div>
+
+      <!-- NEW: two-column property selection -->
+      <div class="trade-columns">
+        <div class="trade-column">
+          <h3 class="trade-column-title">You Give</h3>
+          <div id="tradeGiveList" class="trade-prop-list">
+            <p class="trade-prop-empty">No tradable properties.</p>
+          </div>
+        </div>
+
+        <div class="trade-column">
+          <h3 class="trade-column-title">You Receive</h3>
+          <div id="tradeReceiveList" class="trade-prop-list">
+            <p class="trade-prop-empty">Select a player to see their properties.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="trade-row trade-money-row">
+        <div class="trade-money-col">
+          <label for="tradeMoneyOffered">You pay ($)</label>
+          <input id="tradeMoneyOffered" type="number" min="0" value="0" />
+        </div>
+        <div class="trade-money-col">
+          <label for="tradeMoneyRequested">They pay ($)</label>
+          <input id="tradeMoneyRequested" type="number" min="0" value="0" />
+        </div>
+      </div>
+
+      <div class="trade-actions">
+        <button id="tradeConfirmBtn" class="primary-btn">Confirm Trade</button>
+        <button id="tradeCancelBtn" class="secondary-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+    <!-- AUCTION OVERLAY -->
+  <div id="auctionPanel" class="auction-overlay">
+    <div class="auction-card">
+      <h2 class="auction-title">Auction</h2>
+      <p id="auctionPropertyName" class="auction-property-name">Property</p>
+
+      <div class="auction-body">
+        <div class="auction-row">
+          <span>Current Bid</span>
+          <span id="auctionCurrentBid">$0</span>
+        </div>
+
+        <div class="auction-row">
+          <span>Highest Bidder</span>
+          <span id="auctionHighestBidder">—</span>
+        </div>
+
+        <div class="auction-row">
+          <span>Current Turn</span>
+          <span id="auctionCurrentBidder">—</span>
+        </div>
+      </div>
+
+      <div class="field-group" style="margin-bottom: 10px;">
+        <label for="auctionBidAmount">Your Bid ($)</label>
+        <input id="auctionBidAmount" type="number" min="0" step="1" value="0" class="name-input" />
+      </div>
+
+      <p class="auction-hint">Type any amount and click Bid, or Pass.</p>
+
+      <div class="auction-actions">
+        <button id="auctionBidBtn" class="primary-btn">Bid</button>
+        <button id="auctionPassBtn" class="secondary-btn">Pass</button>
+      </div>
+    </div>
+  </div>
+
+    <!-- HOLDINGS OVERLAY -->
+  <div id="holdingsOverlay" class="holdings-overlay">
+    <div class="holdings-modal">
+      <h2>Player Holdings</h2>
+
+      <!-- Player selector row -->
+      <div class="holdings-player-row">
+        <label for="holdingsPlayerSelect" class="holdings-player-label">
+          View player:
+        </label>
+        <select id="holdingsPlayerSelect" class="field-select holdings-player-select"></select>
+      </div>
+
+      <p id="holdingsPlayerName" class="holdings-player-name">Current Player</p>
+
+      <div id="currentPlayerHoldings" class="holdings-panel">
+        <p>No game in progress.</p>
+      </div>
+
+      <div class="holdings-actions">
+        <button id="closeHoldingsBtn" class="secondary-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JAIL / LONG DISTANCE MODAL (ONLY ONE) -->
+  <div id="jailModal" class="overlay jail-modal-overlay" style="display: none;">
+    <div class="jail-modal">
+      <h2>In Long Distance</h2>
+      <p id="jailModalText">
+        You are in Long Distance. Choose how you want to try to get out.
+      </p>
+
+      <div class="jail-options">
+        <button id="jailUseCardBtn" class="btn jail-primary">Use Get-Out-of-Long-Distance Card</button>
+        <button id="jailPayBtn" class="btn jail-primary">Pay $50 to Leave</button>
+        <button id="jailRollBtn" class="btn jail-secondary">Roll for Doubles</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ACTION / CARD MODAL -->
+  <div id="actionOverlay" class="action-overlay" style="display: none;">
+    <div class="action-card">
+      <h2 id="actionTitle" class="action-title">Action</h2>
+      <p id="actionBody" class="action-body"></p>
+
+      <div class="action-buttons">
+        <button id="actionPrimaryBtn" class="primary-btn">OK</button>
+        <button id="actionSecondaryBtn" class="secondary-btn" style="display: none;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEBT RESOLUTION OVERLAY -->
+  <div id="debtOverlay" class="debt-overlay" style="display: none;">
+    <div class="debt-card">
+      <h2 class="debt-title">Debt Resolution</h2>
+      <p id="debtBody" class="debt-body"></p>
+
+      <div class="debt-actions">
+        <button id="debtTradeBtn" class="secondary-btn">Open Trade</button>
+        <button id="debtHoldingsBtn" class="secondary-btn">See Properties</button>
+        <button id="debtPayNowBtn" class="primary-btn">Pay Now</button>
+        <button id="debtBankruptBtn" class="bankrupt-btn">Declare Bankruptcy</button>
+      </div>
+
+      <p class="debt-hint">
+        You must raise funds (mortgage, sell houses, trade) to pay what you owe.
+      </p>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
