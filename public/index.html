@@ -11,98 +11,232 @@
       <h1 class="logo">BIVOPOLY</h1>
       <p class="tagline">Custom Monopoly for Up to Four Players</p>
     </header>
-    <!-- ONLINE LOBBY OVERLAY -->
-    <div id="onlineLobby" class="lobby-overlay">
-      <div class="lobby-card" role="dialog" aria-modal="true" aria-label="Online Lobby">
-        <button id="closeLobbyBtn" class="lobby-close" type="button" aria-label="Close lobby" style="display:none;">✕</button>
 
-        <h2 class="lobby-title">Play Online</h2>
-        <p class="lobby-subtitle">Create a room, share the code, then press <b>Start Online Game</b> to begin.</p>
+    <!-- SETUP OVERLAY -->
+        <!-- SETUP OVERLAY -->
+    <div id="setupScreen" class="setup-overlay">
+      <div class="setup-card">
+        <h2 class="setup-title">Game Setup</h2>
+        <p class="setup-subtitle">
+          Choose the number of players (2–4). Customize names, colors, and home spaces.
+          If a name is left blank, a default name (Player #) will be used.
+        </p>
 
-        <div class="lobby-row">
-          <label class="lobby-label" for="lobbyName">Your name</label>
-          <input id="lobbyName" class="lobby-input" type="text" placeholder="Olivia" maxlength="15" />
-        </div>
-
-        <div class="lobby-actions">
-          <button id="createRoomBtn" class="primary-btn" type="button">Create Room</button>
-
-          <div class="join-row">
-            <input id="joinCodeInput" class="lobby-input" type="text" placeholder="ROOM CODE" maxlength="8" />
-            <button id="joinRoomBtn" class="secondary-btn" type="button">Join</button>
-          </div>
-        </div>
-
-        <p id="lobbyStatus" class="lobby-status">Connecting...</p>
-
-        <div id="roomInfo" class="room-info" style="display:none;">
-          <div class="room-code-row">
-            <div class="room-code">
-              Room Code: <span id="roomCodeText">------</span>
+        <!-- NEW: two-column main layout -->
+        <div class="setup-main">
+          <!-- LEFT: Number of players + player setup -->
+          <div class="setup-main-left">
+            <!-- Number of Players Selector -->
+            <div class="field-group" style="margin-bottom: 10px;">
+              <label for="numPlayersSelect" style="font-weight: bold;">Number of Players</label>
+              <select id="numPlayersSelect" class="field-select">
+                <option value="2">2 Players</option>
+                <option value="3">3 Players</option>
+                <option value="4" selected>4 Players</option>
+              </select>
             </div>
-            <button id="copyRoomCodeBtn" class="secondary-btn" type="button">Copy</button>
-          </div>
 
-          <div class="room-players">
-            <h3 class="room-players-title">Players</h3>
-            <ul id="roomPlayersList" class="room-players-list"></ul>
-          </div>
+            <!-- Spacer -->
+            <div style="height: 10px;"></div>
 
-          <!-- HOST ONLY: GAME RULES (moved from old setup screen) -->
-          <div class="lobby-rules" id="hostRulesCard" style="display:none;">
-            <h3 class="rules-title">Game Rules</h3>
+            <!-- Four player setup blocks: name + color + home in one box -->
+            <div class="setup-grid">
 
-            <label class="toggle-row">
-              <input type="checkbox" id="toggleUnlimitedHouses" class="toggle-checkbox" />
-              <span class="toggle-label">Unlimited Houses / Hotels</span>
-            </label>
+              <!-- Player 1 Setup -->
+              <div class="player-setup" data-player-index="0">
+                <h3 class="player-title">Player 1</h3>
 
-            <label class="toggle-row">
-              <input type="checkbox" id="toggleAuctionMode" class="toggle-checkbox" />
-              <span class="toggle-label">Auction Mode</span>
-            </label>
+                <div class="field-group">
+                  <label for="player1NameInput">Name</label>
+                  <input
+                    id="player1NameInput"
+                    type="text"
+                    placeholder="Player 1"
+                    maxlength="15"
+                    class="name-input"
+                  />
+                </div>
 
-            <label class="toggle-row">
-              <input type="checkbox" id="toggleFreeParkingJackpot" class="toggle-checkbox" />
-              <span class="toggle-label">Free Parking Jackpot</span>
-            </label>
+                <div class="field-group">
+                  <label for="player1ColorSelect">Color</label>
+                  <select id="player1ColorSelect" class="field-select"></select>
+                  <div class="color-preview-row">
+                    <span class="color-dot" id="p1ColorDot"></span>
+                    <span id="player1ColorValue" class="color-name">Orange</span>
+                  </div>
+                </div>
 
-            <label class="toggle-row">
-              <input type="checkbox" id="toggleEvenBuild" class="toggle-checkbox" checked />
-              <span class="toggle-label">Even Build Rule</span>
-            </label>
+                <div class="field-group">
+                  <label for="player1HomeSelect">Home Space</label>
+                  <select id="player1HomeSelect" class="field-select"></select>
+                </div>
+              </div>
 
-            <div class="field-group" style="margin-top:10px;">
-              <label for="startMoneyInput">Starting Money (per player)</label>
-              <input id="startMoneyInput" type="number" class="lobby-input" min="0" step="50" value="1500" />
+              <!-- Player 2 Setup -->
+              <div class="player-setup" data-player-index="1">
+                <h3 class="player-title">Player 2</h3>
+
+                <div class="field-group">
+                  <label for="player2NameInput">Name</label>
+                  <input
+                    id="player2NameInput"
+                    type="text"
+                    placeholder="Player 2"
+                    maxlength="15"
+                    class="name-input"
+                  />
+                </div>
+
+                <div class="field-group">
+                  <label for="player2ColorSelect">Color</label>
+                  <select id="player2ColorSelect" class="field-select"></select>
+                  <div class="color-preview-row">
+                    <span class="color-dot" id="p2ColorDot"></span>
+                    <span id="player2ColorValue" class="color-name">Purple</span>
+                  </div>
+                </div>
+
+                <div class="field-group">
+                  <label for="player2HomeSelect">Home Space</label>
+                  <select id="player2HomeSelect" class="field-select"></select>
+                </div>
+              </div>
+
+              <!-- Player 3 Setup -->
+              <div class="player-setup" data-player-index="2">
+                <h3 class="player-title">Player 3</h3>
+
+                <div class="field-group">
+                  <label for="player3NameInput">Name</label>
+                  <input
+                    id="player3NameInput"
+                    type="text"
+                    placeholder="Player 3"
+                    maxlength="15"
+                    class="name-input"
+                  />
+                </div>
+
+                <div class="field-group">
+                  <label for="player3ColorSelect">Color</label>
+                  <select id="player3ColorSelect" class="field-select"></select>
+                  <div class="color-preview-row">
+                    <span class="color-dot" id="p3ColorDot"></span>
+                    <span id="player3ColorValue" class="color-name">Blue</span>
+                  </div>
+                </div>
+
+                <div class="field-group">
+                  <label for="player3HomeSelect">Home Space</label>
+                  <select id="player3HomeSelect" class="field-select"></select>
+                </div>
+              </div>
+
+              <!-- Player 4 Setup -->
+              <div class="player-setup" data-player-index="3">
+                <h3 class="player-title">Player 4</h3>
+
+                <div class="field-group">
+                  <label for="player4NameInput">Name</label>
+                  <input
+                    id="player4NameInput"
+                    type="text"
+                    placeholder="Player 4"
+                    maxlength="15"
+                    class="name-input"
+                  />
+                </div>
+
+                <div class="field-group">
+                  <label for="player4ColorSelect">Color</label>
+                  <select id="player4ColorSelect" class="field-select"></select>
+                  <div class="color-preview-row">
+                    <span class="color-dot" id="p4ColorDot"></span>
+                    <span id="player4ColorValue" class="color-name">Red</span>
+                  </div>
+                </div>
+
+                <div class="field-group">
+                  <label for="player4HomeSelect">Home Space</label>
+                  <select id="player4HomeSelect" class="field-select"></select>
+                </div>
+              </div>
             </div>
           </div>
 
-          <button id="onlineStartBtn" class="primary-btn" type="button" style="display:none; width:100%; margin-top:12px;">
-            Start Online Game
-          </button>
+          <!-- RIGHT: Game Rules -->
+          <div class="setup-main-right">
+            <div class="setup-rules-card">
+              <h3 class="rules-title">Game Rules</h3>
 
-          <p class="room-hint">
-            The host starts the game. After the board appears, each player will pick their color.
-          </p>
+              <!-- Unlimited Houses / Hotels -->
+              <label class="toggle-row">
+                <input
+                  type="checkbox"
+                  id="toggleUnlimitedHouses"
+                  class="toggle-checkbox"
+                />
+                <span class="toggle-label">Unlimited Houses / Hotels</span>
+              </label>
+
+              <!-- Auction Mode -->
+              <label class="toggle-row">
+                <input
+                  type="checkbox"
+                  id="toggleAuctionMode"
+                  class="toggle-checkbox"
+                />
+                <span class="toggle-label">
+                  Auction Mode (unbought properties go to auction)
+                </span>
+              </label>
+
+              <!-- Free Parking Jackpot -->
+              <label class="toggle-row">
+                <input
+                  type="checkbox"
+                  id="toggleFreeParkingJackpot"
+                  class="toggle-checkbox"
+                />
+                <span class="toggle-label">Free Parking Jackpot</span>
+              </label>
+
+              <!-- Even Build Rule -->
+              <label class="toggle-row">
+                <input
+                  type="checkbox"
+                  id="toggleEvenBuild"
+                  class="toggle-checkbox"
+                  checked
+                />
+                <span class="toggle-label">Even House Build (Monopoly rule)</span>
+              </label>
+
+              <!-- Starting Money -->
+              <div class="field-group">
+                <label for="startMoneyInput">Starting Money (per player)</label>
+                <input
+                  id="startMoneyInput"
+                  type="number"
+                  class="name-input"
+                  min="0"
+                  step="50"
+                  value="1500"
+                />
+              </div>
+            </div>
+          </div>
         </div>
+
+        <button id="startGameBtn" class="primary-btn">
+          Start Game
+        </button>
+
+        <p id="setupHint" class="setup-hint">
+          Choose unique colors for all selected players.
+        </p>
       </div>
     </div>
-
-    <!-- Header room pill -->
-    <button id="openLobbyBtn" class="online-pill" type="button" style="display:none;">
-      Room: <span id="openLobbyCode">------</span>
-    </button>
-
-    <!-- ONLINE COLOR PICKER OVERLAY -->
-    <div id="onlineColorOverlay" class="online-color-overlay" style="display:none;">
-      <div class="online-color-card" role="dialog" aria-modal="true" aria-label="Choose color">
-        <h2 class="online-color-title">Choose Your Color</h2>
-        <p id="onlineColorSubtitle" class="online-color-subtitle">Pick a color that no one else has chosen.</p>
-        <div id="onlineColorChoices" class="online-color-choices"></div>
-      </div>
-    </div>
-
 
 
     <!-- MAIN GAME LAYOUT -->
@@ -403,6 +537,76 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="script.js"></script>
+<script src="script.js"></script>
+
+<!-- =====================
+     ONLINE LOBBY OVERLAY
+     ===================== -->
+<div id="onlineLobbyOverlay" class="online-lobby-overlay" style="display:flex;">
+  <div class="online-lobby-card">
+    <div class="online-lobby-header">
+      <div class="online-lobby-title">BIVOPOLY ONLINE</div>
+      <button id="onlineLobbyCloseBtn" class="online-lobby-close" type="button" title="Close">×</button>
+    </div>
+
+    <div class="online-lobby-row">
+      <label class="online-label">Your Name</label>
+      <input id="onlineNameInput" class="online-input" type="text" maxlength="15" placeholder="Olivia" />
+    </div>
+
+    <div class="online-lobby-actions">
+      <button id="onlineCreateRoomBtn" class="online-btn-primary" type="button">Create Room</button>
+      <div class="online-join">
+        <input id="onlineJoinCodeInput" class="online-input" type="text" maxlength="8" placeholder="ROOM CODE" />
+        <button id="onlineJoinRoomBtn" class="online-btn" type="button">Join</button>
+      </div>
+    </div>
+
+    <div id="onlineRoomInfo" class="online-room-info" style="display:none;">
+      <div class="online-room-code">Room Code: <span id="onlineRoomCodeText">------</span></div>
+      <div class="online-players-title">Players</div>
+      <div id="onlinePlayersList" class="online-players-list"></div>
+
+      <div id="onlineHostRules" class="online-host-rules" style="display:none;">
+        <div class="online-rules-title">Host Rules</div>
+
+        <div class="online-rule">
+          <label><input id="ruleUnlimitedHouses" type="checkbox"> Unlimited Houses</label>
+        </div>
+        <div class="online-rule">
+          <label><input id="ruleAuctionMode" type="checkbox"> Auction Mode</label>
+        </div>
+        <div class="online-rule">
+          <label><input id="ruleFreeParkingJackpot" type="checkbox"> Free Parking Jackpot</label>
+        </div>
+        <div class="online-rule">
+          <label><input id="ruleEvenHouseBuild" type="checkbox" checked> Even House Build</label>
+        </div>
+        <div class="online-rule">
+          <label>Starting Money</label>
+          <input id="ruleStartingMoney" class="online-input" type="number" min="0" step="50" value="1500" />
+        </div>
+      </div>
+
+      <button id="onlineStartBtn" class="online-btn-primary" type="button" style="display:none; margin-top:12px;">
+        Start Online Game
+      </button>
+    </div>
+
+    <div id="onlineLobbyStatus" class="online-status">Not connected.</div>
+  </div>
+</div>
+
+<!-- =====================
+     ONLINE COLOR PICKER
+     ===================== -->
+<div id="onlineColorOverlay" class="online-color-overlay" style="display:none;">
+  <div class="online-color-card">
+    <div class="online-color-title">Choose Your Color</div>
+    <div id="onlineColorSubtitle" class="online-color-subtitle">Pick a color that no one else has chosen.</div>
+    <div id="onlineColorChoices" class="online-color-choices"></div>
+  </div>
+</div>
+
 </body>
 </html>

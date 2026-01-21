@@ -1443,140 +1443,138 @@ playerNameInputs.forEach((input) => {
 // =====================
 
 if (startGameBtn && setupScreen) {
-  if (startGameBtn) {
   startGameBtn.addEventListener("click", () => {
-      // Fresh game / rules each time Start Game is pressed
-      resetAuctionState();
-  
-      // Read rule toggles / inputs
-      const auctionToggle    = document.getElementById("toggleAuctionMode");
-      const unlimitedToggle  = document.getElementById("toggleUnlimitedHouses");
-      const freeParkingTgl   = document.getElementById("toggleFreeParkingJackpot");
-      const evenBuildTgl     = document.getElementById("toggleEvenBuild");
-      const startMoneyInput  = document.getElementById("startMoneyInput");
-  
-      rules.auctionMode        = auctionToggle   ? auctionToggle.checked   : false;
-      rules.unlimitedHouses    = unlimitedToggle ? unlimitedToggle.checked : false;
-      rules.freeParkingJackpot = freeParkingTgl  ? freeParkingTgl.checked  : false;
-      rules.evenHouseBuild     = evenBuildTgl    ? evenBuildTgl.checked    : true;
-  
-      let startingMoney = 1500;
-      if (startMoneyInput) {
-        const parsed = parseInt(startMoneyInput.value, 10);
-        if (!Number.isNaN(parsed) && parsed > 0) {
-          startingMoney = parsed;
-        }
+    // Fresh game / rules each time Start Game is pressed
+    resetAuctionState();
+
+    // Read rule toggles / inputs
+    const auctionToggle    = document.getElementById("toggleAuctionMode");
+    const unlimitedToggle  = document.getElementById("toggleUnlimitedHouses");
+    const freeParkingTgl   = document.getElementById("toggleFreeParkingJackpot");
+    const evenBuildTgl     = document.getElementById("toggleEvenBuild");
+    const startMoneyInput  = document.getElementById("startMoneyInput");
+
+    rules.auctionMode        = auctionToggle   ? auctionToggle.checked   : false;
+    rules.unlimitedHouses    = unlimitedToggle ? unlimitedToggle.checked : false;
+    rules.freeParkingJackpot = freeParkingTgl  ? freeParkingTgl.checked  : false;
+    rules.evenHouseBuild     = evenBuildTgl    ? evenBuildTgl.checked    : true;
+
+    let startingMoney = 1500;
+    if (startMoneyInput) {
+      const parsed = parseInt(startMoneyInput.value, 10);
+      if (!Number.isNaN(parsed) && parsed > 0) {
+        startingMoney = parsed;
       }
-      rules.startingMoney = startingMoney;
-  
-      // Reset Free Parking pot for new game
-      freeParkingPot = 0;
-  
-      turnOrder = [];
-  
-      // Reset all players
-      players.forEach(p => {
-        p.active = false;
-        p.properties = [];
-      });
-  
-      const numPlayers = getSelectedPlayerCount();
-  
-      // Configure first N players
-      for (let idx = 0; idx < numPlayers; idx++) {
-        const p = players[idx];
-  
-        const nameInput   = playerNameInputs[idx];
-        const colorSelect = colorSelects[idx];
-        const homeSelect  = homeSelects[idx];
-  
-        const fallbackName = `Player ${idx + 1}`;
-        const name = nameInput && nameInput.value.trim()
-          ? nameInput.value.trim()
-          : fallbackName;
-  
-        const colorName = colorSelect ? colorSelect.value : Object.keys(COLOR_MAP)[idx];
-        const hex = COLOR_MAP[colorName];
-  
-        const homeIndex = homeSelect
-          ? parseInt(homeSelect.value, 10)
-          : allowedHomeSpaces[idx % allowedHomeSpaces.length];
-  
-        p.name = name;
-        p.color = hex;
-        p.home = homeIndex;
-        p.position = 0;
-        p.inJail = false;
-        p.jailTurns = 0;
-        p.getOutOfJailCards = 0;
-        p.money = rules.startingMoney;
-        p.properties = [];
-        p.active = true;
-  
-        turnOrder.push(idx);
-      }
-  
-      if (turnOrder.length < 2) {
-        showInfoModal("You must have at least two players.");
+    }
+    rules.startingMoney = startingMoney;
+
+    // Reset Free Parking pot for new game
+    freeParkingPot = 0;
+
+    turnOrder = [];
+
+    // Reset all players
+    players.forEach(p => {
+      p.active = false;
+      p.properties = [];
+    });
+
+    const numPlayers = getSelectedPlayerCount();
+
+    // Configure first N players
+    for (let idx = 0; idx < numPlayers; idx++) {
+      const p = players[idx];
+
+      const nameInput   = playerNameInputs[idx];
+      const colorSelect = colorSelects[idx];
+      const homeSelect  = homeSelects[idx];
+
+      const fallbackName = `Player ${idx + 1}`;
+      const name = nameInput && nameInput.value.trim()
+        ? nameInput.value.trim()
+        : fallbackName;
+
+      const colorName = colorSelect ? colorSelect.value : Object.keys(COLOR_MAP)[idx];
+      const hex = COLOR_MAP[colorName];
+
+      const homeIndex = homeSelect
+        ? parseInt(homeSelect.value, 10)
+        : allowedHomeSpaces[idx % allowedHomeSpaces.length];
+
+      p.name = name;
+      p.color = hex;
+      p.home = homeIndex;
+      p.position = 0;
+      p.inJail = false;
+      p.jailTurns = 0;
+      p.getOutOfJailCards = 0;
+      p.money = rules.startingMoney;
+      p.properties = [];
+      p.active = true;
+
+      turnOrder.push(idx);
+    }
+
+    if (turnOrder.length < 2) {
+      showInfoModal("You must have at least two players.");
+      return;
+    }
+
+    // Enforce unique colors among active players
+    const seenColors = new Set();
+    for (const idx of turnOrder) {
+      const p = players[idx];
+      if (seenColors.has(p.color)) {
+        showInfoModal("Active players must all have different colors.");
         return;
       }
-  
-      // Enforce unique colors among active players
-      const seenColors = new Set();
-      for (const idx of turnOrder) {
-        const p = players[idx];
-        if (seenColors.has(p.color)) {
-          showInfoModal("Active players must all have different colors.");
-          return;
-        }
-        seenColors.add(p.color);
+      seenColors.add(p.color);
+    }
+
+    // Update legend names
+    legendNameSpans.forEach((span, idx) => {
+      if (!span) return;
+      const p = players[idx];
+      if (p.active) {
+        span.textContent = p.name;
+        span.style.opacity = "1";
+      } else {
+        span.textContent = `Player ${idx + 1}`;
+        span.style.opacity = "0.4";
       }
-  
-      // Update legend names
-      legendNameSpans.forEach((span, idx) => {
-        if (!span) return;
-        const p = players[idx];
-        if (p.active) {
-          span.textContent = p.name;
-          span.style.opacity = "1";
-        } else {
-          span.textContent = `Player ${idx + 1}`;
-          span.style.opacity = "0.4";
-        }
-      });
-  
-      updateMoneyUI();
-  
-      currentTurnPointer = 0;
-      if (setupScreen) setupScreen.style.display = "none";
-  
-      // Reset event log for new game
-      eventLogEntries.length = 0;
-      renderEventLog();
-  
-      const firstPlayer = players[turnOrder[0]];
-      if (currentTurnDisplay) {
-        currentTurnDisplay.textContent = `Current Turn: ${firstPlayer.name}`;
-      }
-  
-      showInfoModal(`🎲 Game Started! ${firstPlayer.name} goes first.`);
-  
-      logEvent(
-        `New game started with ${turnOrder.length} player(s). ` +
-        `Auction Mode: ${rules.auctionMode ? "ON" : "OFF"}, ` +
-        `Unlimited Houses: ${rules.unlimitedHouses ? "ON" : "OFF"}, ` +
-        `Free Parking Jackpot: ${rules.freeParkingJackpot ? "ON" : "OFF"}, ` +
-        `Even Build: ${rules.evenHouseBuild ? "ON" : "OFF"}, ` +
-        `Start Money: $${rules.startingMoney}.`
-      );
-      logEvent(`${firstPlayer.name} goes first.`);
-  
-      renderBoard();
-      renderPropertyInfo(null);
-      updateHoldingsPanel();
-      setupTradePanel();
     });
-  }
+
+    updateMoneyUI();
+
+    currentTurnPointer = 0;
+    setupScreen.style.display = "none";
+
+    // Reset event log for new game
+    eventLogEntries.length = 0;
+    renderEventLog();
+
+    const firstPlayer = players[turnOrder[0]];
+    if (currentTurnDisplay) {
+      currentTurnDisplay.textContent = `Current Turn: ${firstPlayer.name}`;
+    }
+
+    showInfoModal(`🎲 Game Started! ${firstPlayer.name} goes first.`);
+
+    logEvent(
+      `New game started with ${turnOrder.length} player(s). ` +
+      `Auction Mode: ${rules.auctionMode ? "ON" : "OFF"}, ` +
+      `Unlimited Houses: ${rules.unlimitedHouses ? "ON" : "OFF"}, ` +
+      `Free Parking Jackpot: ${rules.freeParkingJackpot ? "ON" : "OFF"}, ` +
+      `Even Build: ${rules.evenHouseBuild ? "ON" : "OFF"}, ` +
+      `Start Money: $${rules.startingMoney}.`
+    );
+    logEvent(`${firstPlayer.name} goes first.`);
+
+    renderBoard();
+    renderPropertyInfo(null);
+    updateHoldingsPanel();
+    setupTradePanel();
+  });
 }
 
 // =====================
@@ -4240,580 +4238,403 @@ setupTradePanel();
 updateBankSupplyUI();
 
 
-// =====================
-// ONLINE MULTIPLAYER (HOST-AUTHORITATIVE SNAPSHOT SYNC)
-// =====================
-// - Host runs the full game logic (existing buttons / handlers).
-// - Non-hosts request actions; host applies them and broadcasts a full snapshot.
-// - Works without rewriting your core game engine.
+
+// ===============================
+// BIVOPOLY ONLINE MODULE (HOST-AUTH)
+// ===============================
+// This module makes the host authoritative.
+// Host runs all game logic. Guests send requests.
+// Host sends full snapshots to sync everyone.
 
 const ONLINE = {
-  enabled: true,
   socket: null,
   connected: false,
   roomCode: null,
-  isHost: false,
   seat: null,
-  roomPlayers: []
+  isHost: false,
+  players: [],
+  started: false,
+  colorBySeat: {}
 };
 
-// Lobby DOM
-const lobbyOverlayEl = document.getElementById("onlineLobby");
-const lobbyNameEl = document.getElementById("lobbyName");
-const createRoomBtnEl = document.getElementById("createRoomBtn");
-const joinRoomBtnEl = document.getElementById("joinRoomBtn");
-const joinCodeInputEl = document.getElementById("joinCodeInput");
-const lobbyStatusEl = document.getElementById("lobbyStatus");
-const roomInfoEl = document.getElementById("roomInfo");
-const roomCodeTextEl = document.getElementById("roomCodeText");
-const copyRoomCodeBtnEl = document.getElementById("copyRoomCodeBtn");
-const roomPlayersListEl = document.getElementById("roomPlayersList");
-const closeLobbyBtnEl = document.getElementById("closeLobbyBtn");
+const onlineLobbyOverlayEl = document.getElementById("onlineLobbyOverlay");
+const onlineLobbyCloseBtnEl = document.getElementById("onlineLobbyCloseBtn");
+const onlineNameInputEl = document.getElementById("onlineNameInput");
+const onlineCreateRoomBtnEl = document.getElementById("onlineCreateRoomBtn");
+const onlineJoinCodeInputEl = document.getElementById("onlineJoinCodeInput");
+const onlineJoinRoomBtnEl = document.getElementById("onlineJoinRoomBtn");
+const onlineRoomInfoEl = document.getElementById("onlineRoomInfo");
+const onlineRoomCodeTextEl = document.getElementById("onlineRoomCodeText");
+const onlinePlayersListEl = document.getElementById("onlinePlayersList");
+const onlineHostRulesEl = document.getElementById("onlineHostRules");
 const onlineStartBtnEl = document.getElementById("onlineStartBtn");
-const hostRulesCardEl = document.getElementById("hostRulesCard");
+const onlineLobbyStatusEl = document.getElementById("onlineLobbyStatus");
 
-// Room pill
-const openLobbyBtnEl = document.getElementById("openLobbyBtn");
-const openLobbyCodeEl = document.getElementById("openLobbyCode");
+// Host rule controls
+const ruleUnlimitedHousesEl = document.getElementById("ruleUnlimitedHouses");
+const ruleAuctionModeEl = document.getElementById("ruleAuctionMode");
+const ruleFreeParkingJackpotEl = document.getElementById("ruleFreeParkingJackpot");
+const ruleEvenHouseBuildEl = document.getElementById("ruleEvenHouseBuild");
+const ruleStartingMoneyEl = document.getElementById("ruleStartingMoney");
 
-// Color picker DOM
+// Color picker overlay
 const onlineColorOverlayEl = document.getElementById("onlineColorOverlay");
-const onlineColorChoicesEl = document.getElementById("onlineColorChoices");
 const onlineColorSubtitleEl = document.getElementById("onlineColorSubtitle");
+const onlineColorChoicesEl = document.getElementById("onlineColorChoices");
 
-function setLobbyStatus(msg) {
-  if (lobbyStatusEl) lobbyStatusEl.textContent = msg || "";
+// map from color name (in your COLOR_MAP select list) to same name
+const COLOR_NAMES = Object.keys(COLOR_MAP);
+
+function setOnlineStatus(msg) {
+  if (onlineLobbyStatusEl) onlineLobbyStatusEl.textContent = msg;
 }
 
-function showLobbyOverlay() {
-  if (lobbyOverlayEl) lobbyOverlayEl.style.display = "flex";
-  if (closeLobbyBtnEl) closeLobbyBtnEl.style.display = ONLINE.roomCode ? "inline-flex" : "none";
+function showLobby() {
+  if (onlineLobbyOverlayEl) onlineLobbyOverlayEl.style.display = "flex";
+}
+function hideLobby() {
+  if (onlineLobbyOverlayEl) onlineLobbyOverlayEl.style.display = "none";
 }
 
-function hideLobbyOverlay() {
-  if (lobbyOverlayEl) lobbyOverlayEl.style.display = "none";
-}
+function renderOnlinePlayers(list) {
+  ONLINE.players = Array.isArray(list) ? list.slice() : [];
+  if (!onlinePlayersListEl) return;
+  onlinePlayersListEl.innerHTML = "";
+  const sorted = ONLINE.players.slice().sort((a,b)=> (a.seat??0)-(b.seat??0));
+  sorted.forEach(p=>{
+    const row=document.createElement("div");
+    row.className="online-player-row";
+    const left=document.createElement("div");
+    left.textContent = `${p.name}`;
+    const right=document.createElement("div");
+    right.className="online-player-badge";
+    right.textContent = p.isHost ? "Host" : `Seat ${p.seat+1}`;
+    row.appendChild(left);
+    row.appendChild(right);
+    onlinePlayersListEl.appendChild(row);
+  });
 
-function updateRoomPill(code) {
-  if (!openLobbyBtnEl) return;
-  if (openLobbyCodeEl) openLobbyCodeEl.textContent = code || "------";
-  openLobbyBtnEl.style.display = code ? "inline-flex" : "none";
-}
-
-function showRoomInfo(code, playersList) {
-  if (roomInfoEl) roomInfoEl.style.display = code ? "block" : "none";
-  if (roomCodeTextEl) roomCodeTextEl.textContent = code || "------";
-  updateRoomPill(code);
-  renderRoomPlayers(playersList || []);
-  if (closeLobbyBtnEl) closeLobbyBtnEl.style.display = code ? "inline-flex" : "none";
-}
-
-function renderRoomPlayers(list) {
-  ONLINE.roomPlayers = Array.isArray(list) ? list : [];
-
-  if (!roomPlayersListEl) return;
-  roomPlayersListEl.innerHTML = "";
-
-  ONLINE.roomPlayers
-    .slice()
-    .sort((a, b) => (a.seat ?? 0) - (b.seat ?? 0))
-    .forEach((p) => {
-      const li = document.createElement("li");
-      const left = document.createElement("span");
-      left.textContent = `${p.name || "Player"} (P${(p.seat ?? 0) + 1})`;
-      const right = document.createElement("span");
-      right.textContent = p.isHost ? "Host" : "";
-      right.style.opacity = "0.85";
-      li.appendChild(left);
-      li.appendChild(right);
-      roomPlayersListEl.appendChild(li);
-    });
-
+  // Host can start when 2+ players
   if (onlineStartBtnEl) {
-    const canStart = ONLINE.isHost && ONLINE.roomPlayers.length >= 2;
+    const canStart = ONLINE.isHost && sorted.length >= 2;
+    onlineStartBtnEl.style.display = canStart ? "block" : "none";
     onlineStartBtnEl.disabled = !canStart;
-    onlineStartBtnEl.style.opacity = canStart ? "1" : "0.5";
   }
+}
+
+function applyHostRulesToGame() {
+  // Apply to existing rules object in your game
+  rules.unlimitedHouses = !!ruleUnlimitedHousesEl?.checked;
+  rules.auctionMode = !!ruleAuctionModeEl?.checked;
+  rules.freeParkingJackpot = !!ruleFreeParkingJackpotEl?.checked;
+  rules.evenHouseBuild = !!ruleEvenHouseBuildEl?.checked;
+  const money = Number(ruleStartingMoneyEl?.value);
+  rules.startingMoney = Number.isFinite(money) ? money : 1500;
+}
+
+function initGameFromLobbyPlayers(lobbyPlayers) {
+  const sorted = (Array.isArray(lobbyPlayers) ? lobbyPlayers : []).slice().sort((a,b)=> (a.seat??0)-(b.seat??0));
+  const count = Math.max(2, Math.min(4, sorted.length));
+
+  // Resize players array to count, preserving shape
+  players = sorted.slice(0, count).map((p, i) => ({
+    id: i,
+    name: String(p.name || `Player ${i+1}`).slice(0,15),
+    position: 0,
+    money: rules.startingMoney,
+    inJail: false,
+    jailTurns: 0,
+    getOutOfJailCards: 0,
+    color: null,
+    home: null,
+    active: false,
+    properties: []
+  }));
+
+  // Reset board ownership/buildings
+  board.forEach(t=>{
+    if (t && typeof t === "object") {
+      if ("owner" in t) t.owner = null;
+      if ("houses" in t) t.houses = 0;
+      if ("hotel" in t) t.hotel = false;
+      if ("mortgaged" in t) t.mortgaged = false;
+    }
+  });
+
+  // Turn order: 0..count-1
+  turnOrder = Array.from({length: count}, (_,i)=>i);
+  currentTurnPointer = 0;
+  players.forEach(p=>p.active=false);
+  players[turnOrder[currentTurnPointer]].active=true;
+
+  // Update UI
+  if (currentTurnDisplay) currentTurnDisplay.textContent = `Current Turn: ${players[turnOrder[currentTurnPointer]].name}`;
+  renderBoard();
+  updateMoneyUI();
 }
 
 function buildSnapshot() {
   return {
-    v: 1,
-    roomCode: ONLINE.roomCode,
     players,
-    rules,
+    board,
     turnOrder,
     currentTurnPointer,
-    lastRollTotal,
-    freeParkingPot
+    rules,
+    online: {
+      roomCode: ONLINE.roomCode
+    }
   };
 }
 
 function applySnapshot(snap) {
-  if (!snap || typeof snap !== "object") return;
-
-  // Assign globals
-  players = snap.players || players;
-  rules = snap.rules || rules;
-  turnOrder = snap.turnOrder || turnOrder;
-  currentTurnPointer = typeof snap.currentTurnPointer === "number" ? snap.currentTurnPointer : currentTurnPointer;
-  lastRollTotal = typeof snap.lastRollTotal === "number" ? snap.lastRollTotal : lastRollTotal;
-  freeParkingPot = typeof snap.freeParkingPot === "number" ? snap.freeParkingPot : freeParkingPot;
-
-  // Re-render UI
-  updateMoneyUI();
-  renderBoard();
-  renderPropertyInfo(null);
-  updateHoldingsPanel();
-  setupTradePanel();
-  updateBankSupplyUI();
-
-  // If game started, close lobby automatically
-  if (Array.isArray(turnOrder) && turnOrder.length >= 2) {
-    hideLobbyOverlay();
-    showOnlineColorPickerIfNeeded(false);
+  if (!snap) return;
+  if (snap.rules) {
+    // shallow copy into rules to keep reference stable
+    Object.assign(rules, snap.rules);
   }
+  if (Array.isArray(snap.players)) players = snap.players;
+  if (Array.isArray(snap.board)) {
+    // replace board entries by index
+    for (let i=0;i<snap.board.length;i++) board[i] = snap.board[i];
+  }
+  if (Array.isArray(snap.turnOrder)) turnOrder = snap.turnOrder;
+  if (typeof snap.currentTurnPointer === "number") currentTurnPointer = snap.currentTurnPointer;
+
+  // refresh UI
+  const activeIdx = turnOrder && turnOrder.length ? turnOrder[currentTurnPointer] : 0;
+  if (players && players[activeIdx] && currentTurnDisplay) {
+    currentTurnDisplay.textContent = `Current Turn: ${players[activeIdx].name}`;
+  }
+  renderBoard();
+  updateMoneyUI();
 }
 
 function broadcastSnapshot() {
-  if (!ONLINE.enabled) return;
-  if (!ONLINE.socket) return;
-  if (!ONLINE.isHost) return;
+  if (!ONLINE.isHost || !ONLINE.socket || !ONLINE.connected) return;
   ONLINE.socket.emit("hostState", buildSnapshot());
 }
 
-function requestHostAction(type, payload) {
-  if (!ONLINE.enabled) return;
-  if (!ONLINE.socket) return;
+// Guests request actions; host executes local button clicks
+function requestAction(type, payload=null) {
+  if (!ONLINE.socket || !ONLINE.connected) return;
+  ONLINE.socket.emit("requestAction", { type, payload });
+}
+
+function hookGuestButtons() {
   if (ONLINE.isHost) return;
 
-  ONLINE.socket.emit("requestAction", {
-    type,
-    payload: payload || { seat: ONLINE.seat }
-  });
-}
-
-function forwardIfNonHost(btn, type) {
-  if (!btn) return;
-  btn.addEventListener(
-    "click",
-    (e) => {
-      if (!ONLINE.enabled) return;
-      if (ONLINE.isHost) return;
+  // Disable direct action buttons; guests request actions instead
+  if (rollBtn) {
+    rollBtn.addEventListener("click", (e) => {
       e.preventDefault();
-      e.stopImmediatePropagation();
-      requestHostAction(type, { seat: ONLINE.seat });
-    },
-    true
-  );
-}
-
-function getLobbyPlayersSorted() {
-  const list = Array.isArray(ONLINE.roomPlayers) ? ONLINE.roomPlayers.slice() : [];
-  list.sort((a, b) => (a.seat ?? 0) - (b.seat ?? 0));
-  return list;
-}
-
-function readRulesFromLobbyUI() {
-  const auctionToggle    = document.getElementById("toggleAuctionMode");
-  const unlimitedToggle  = document.getElementById("toggleUnlimitedHouses");
-  const freeParkingTgl   = document.getElementById("toggleFreeParkingJackpot");
-  const evenBuildTgl     = document.getElementById("toggleEvenBuild");
-  const startMoneyInput  = document.getElementById("startMoneyInput");
-
-  rules.auctionMode        = auctionToggle   ? !!auctionToggle.checked   : false;
-  rules.unlimitedHouses    = unlimitedToggle ? !!unlimitedToggle.checked : false;
-  rules.freeParkingJackpot = freeParkingTgl  ? !!freeParkingTgl.checked  : false;
-  rules.evenHouseBuild     = evenBuildTgl    ? !!evenBuildTgl.checked    : true;
-
-  let startingMoney = 1500;
-  if (startMoneyInput) {
-    const parsed = parseInt(startMoneyInput.value, 10);
-    if (!Number.isNaN(parsed) && parsed >= 0) startingMoney = parsed;
+      e.stopPropagation();
+      requestAction("ROLL");
+    }, true);
   }
-  rules.startingMoney = startingMoney;
+
+  if (endTurnBtn) {
+    endTurnBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      requestAction("END_TURN");
+    }, true);
+  }
+
+  if (bankruptBtn) {
+    bankruptBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      requestAction("BANKRUPT");
+    }, true);
+  }
 }
 
-function hostStartOnlineGameNow() {
-  readRulesFromLobbyUI();
+function hookHostActionReceiver() {
+  if (!ONLINE.socket) return;
+  ONLINE.socket.on("hostAction", ({ type }) => {
+    if (!ONLINE.isHost) return;
 
-  // reset auction if function exists
-  if (typeof resetAuctionState === "function") resetAuctionState();
+    // Only host executes real game logic
+    if (type === "ROLL" && rollBtn) rollBtn.click();
+    if (type === "END_TURN" && endTurnBtn) endTurnBtn.click();
+    if (type === "BANKRUPT" && bankruptBtn) bankruptBtn.click();
 
-  freeParkingPot = 0;
-  turnOrder = [];
-
-  players.forEach(p => {
-    p.active = false;
-    p.properties = [];
+    // After any host action, snapshot
+    setTimeout(broadcastSnapshot, 0);
   });
-
-  const lobbyPlayers = getLobbyPlayersSorted();
-  const numPlayers = Math.max(2, Math.min(4, lobbyPlayers.length));
-
-  const colorNames = Object.keys(COLOR_MAP);
-
-  for (let idx = 0; idx < numPlayers; idx++) {
-    const p = players[idx];
-    const lp = lobbyPlayers[idx];
-
-    const name = lp && lp.name ? String(lp.name).slice(0, 15) : `Player ${idx + 1}`;
-    const colorName = colorNames[idx % colorNames.length];
-    const hex = COLOR_MAP[colorName];
-    const homeIndex = allowedHomeSpaces[idx % allowedHomeSpaces.length];
-
-    p.name = name;
-    p.color = hex; // temporary; each player can change after start
-    p.home = homeIndex;
-    p.position = 0;
-    p.inJail = false;
-    p.jailTurns = 0;
-    p.getOutOfJailCards = 0;
-    p.money = rules.startingMoney;
-    p.properties = [];
-    p.active = true;
-
-    turnOrder.push(idx);
-  }
-
-  if (turnOrder.length < 2) {
-    showInfoModal("You must have at least two players in the room.");
-    return;
-  }
-
-  legendNameSpans.forEach((span, idx) => {
-    if (!span) return;
-    const p = players[idx];
-    if (p.active) {
-      span.textContent = p.name;
-      span.style.opacity = "1";
-    } else {
-      span.textContent = `Player ${idx + 1}`;
-      span.style.opacity = "0.4";
-    }
-  });
-
-  updateMoneyUI();
-  currentTurnPointer = 0;
-
-  eventLogEntries.length = 0;
-  renderEventLog();
-
-  const firstPlayer = players[turnOrder[0]];
-  if (currentTurnDisplay) currentTurnDisplay.textContent = `Current Turn: ${firstPlayer.name}`;
-
-  showInfoModal(`🎲 Online game started! ${firstPlayer.name} goes first.`);
-  logEvent(
-    `Online game started with ${turnOrder.length} player(s). ` +
-    `Auction Mode: ${rules.auctionMode ? "ON" : "OFF"}, ` +
-    `Unlimited Houses: ${rules.unlimitedHouses ? "ON" : "OFF"}, ` +
-    `Free Parking Jackpot: ${rules.freeParkingJackpot ? "ON" : "OFF"}, ` +
-    `Even Build: ${rules.evenHouseBuild ? "ON" : "OFF"}, ` +
-    `Start Money: $${rules.startingMoney}.`
-  );
-  logEvent(`${firstPlayer.name} goes first.`);
-
-  renderBoard();
-  renderPropertyInfo(null);
-  updateHoldingsPanel();
-  setupTradePanel();
-  updateBankSupplyUI();
-
-  hideLobbyOverlay();
-  updateRoomPill(ONLINE.roomCode);
-
-  // Sync immediately
-  setTimeout(broadcastSnapshot, 0);
-
-  // Prompt colors
-  showOnlineColorPickerIfNeeded(true);
 }
 
-// ----- Color picker (host-authoritative via requestAction) -----
+function showColorPickerIfNeeded() {
+  if (!onlineColorOverlayEl || !onlineColorChoicesEl) return;
+  if (!ONLINE.started) return;
 
-function isGameStarted() {
-  return Array.isArray(turnOrder) && turnOrder.length >= 2;
-}
+  // If my player already has a color, don't show
+  if (players && players[ONLINE.seat] && players[ONLINE.seat].color) return;
 
-function getColorNameFromHex(hex) {
-  return Object.keys(COLOR_MAP).find(k => COLOR_MAP[k] === hex) || null;
-}
-
-function getTakenColorNames() {
-  const taken = new Set();
-  for (let i = 0; i < players.length; i++) {
-    const p = players[i];
-    if (p && p.active) {
-      const name = getColorNameFromHex(p.color);
-      if (name) taken.add(name);
-    }
-  }
-  return taken;
-}
-
-function buildColorPickerButtons() {
-  if (!onlineColorChoicesEl) return;
-  if (onlineColorChoicesEl.dataset.built === "1") return;
-
+  onlineColorOverlayEl.style.display = "flex";
   onlineColorChoicesEl.innerHTML = "";
-  Object.keys(COLOR_MAP).forEach((cName) => {
-    const btn = document.createElement("button");
-    btn.className = "color-choice-btn";
-    btn.type = "button";
-    btn.dataset.colorName = cName;
 
-    const swatch = document.createElement("span");
-    swatch.className = "color-choice-swatch";
-    swatch.style.backgroundColor = COLOR_MAP[cName];
+  // Determine taken colors by reading players colors (host-synced)
+  const taken = new Set((players||[]).map(p => p?.colorName || p?.color).filter(Boolean));
+
+  COLOR_NAMES.forEach((name) => {
+    const btn = document.createElement("button");
+    btn.className = "online-color-btn";
+    btn.type = "button";
+
+    const sw = document.createElement("span");
+    sw.className = "online-color-swatch";
+    sw.style.background = COLOR_MAP[name];
 
     const label = document.createElement("span");
-    label.textContent = cName;
+    label.textContent = name;
 
-    btn.appendChild(swatch);
+    btn.appendChild(sw);
     btn.appendChild(label);
 
-    btn.addEventListener("click", () => requestColorChoice(cName));
+    btn.disabled = taken.has(name);
+
+    btn.addEventListener("click", () => {
+      if (!ONLINE.socket || !ONLINE.connected) return;
+      ONLINE.socket.emit("chooseColor", { seat: ONLINE.seat, colorName: name });
+    });
+
     onlineColorChoicesEl.appendChild(btn);
   });
-
-  onlineColorChoicesEl.dataset.built = "1";
 }
 
-function refreshColorPickerUI() {
-  if (!onlineColorChoicesEl) return;
-  const me = players && typeof ONLINE.seat === "number" ? players[ONLINE.seat] : null;
-  const myColorName = me ? getColorNameFromHex(me.color) : null;
-
-  const taken = getTakenColorNames();
-  const buttons = onlineColorChoicesEl.querySelectorAll("button.color-choice-btn");
-  buttons.forEach((btn) => {
-    const cName = btn.dataset.colorName;
-    const isTaken = taken.has(cName);
-    btn.disabled = !!myColorName || (isTaken && cName !== myColorName);
-  });
-
-  if (onlineColorSubtitleEl) {
-    onlineColorSubtitleEl.textContent = myColorName
-      ? `Locked in: ${myColorName}.`
-      : "Pick a color that no one else has chosen.";
-  }
-
-  if (myColorName && onlineColorOverlayEl) {
-    setTimeout(() => (onlineColorOverlayEl.style.display = "none"), 250);
-  }
-}
-
-function showOnlineColorPickerIfNeeded(forceShow) {
-  if (!ONLINE.enabled) return;
-  if (!onlineColorOverlayEl || !onlineColorChoicesEl) return;
-  if (!isGameStarted()) return;
-
-  const me = players && typeof ONLINE.seat === "number" ? players[ONLINE.seat] : null;
-  if (!me || !me.active) return;
-
-  const myColorName = getColorNameFromHex(me.color);
-  if (!forceShow && myColorName) return;
-
-  buildColorPickerButtons();
-  onlineColorOverlayEl.style.display = "flex";
-  refreshColorPickerUI();
-}
-
-function requestColorChoice(colorName) {
-  if (!colorName) return;
-
-  if (ONLINE.isHost) {
-    applySeatColorOnHost(ONLINE.seat, colorName);
-    setTimeout(broadcastSnapshot, 0);
-    refreshColorPickerUI();
-  } else {
-    requestHostAction("CHOOSE_COLOR", { seat: ONLINE.seat, colorName });
-  }
-}
-
-function applySeatColorOnHost(seat, colorName) {
+function applyColorOnHost(seat, colorName) {
   const idx = Number(seat);
   if (!Number.isFinite(idx)) return;
   if (!players || !players[idx]) return;
-
-  const hex = COLOR_MAP[colorName];
-  if (!hex) return;
-
-  // Unique among active players
-  for (let i = 0; i < players.length; i++) {
-    if (i === idx) continue;
-    const p = players[i];
-    if (p && p.active && p.color === hex) return;
-  }
-
-  players[idx].color = hex;
+  players[idx].color = COLOR_MAP[colorName] || players[idx].color;
+  // store name too (helps taken checks)
+  players[idx].colorName = colorName;
   renderBoard();
   updateMoneyUI();
 }
 
-// ----- Init online -----
-
-function initOnline() {
-  if (!ONLINE.enabled) return;
-
+function initOnlineNetworking() {
   if (typeof io === "undefined") {
-    setLobbyStatus("Online server not detected. Make sure your server is running.");
+    setOnlineStatus("Socket.IO not loaded. Is the server running?");
     return;
   }
 
   ONLINE.socket = io();
-
-  // Transition guests immediately when host starts the game
-  ONLINE.socket.on("onlineStartGame", () => {
-    hideLobbyOverlay();
-  });
+  setOnlineStatus("Connecting...");
 
   ONLINE.socket.on("connect", () => {
     ONLINE.connected = true;
-    setLobbyStatus("Connected. Create or join a room.");
-    showLobbyOverlay();
+    setOnlineStatus("Connected. Create or join a room.");
   });
 
   ONLINE.socket.on("disconnect", () => {
     ONLINE.connected = false;
-    setLobbyStatus("Disconnected.");
+    setOnlineStatus("Disconnected. Refresh after restarting server.");
+    showLobby();
   });
 
-  ONLINE.socket.on("roomJoined", (payload) => {
-    const { code, seat, isHost, players: list } = payload || {};
+  ONLINE.socket.on("roomError", (msg) => setOnlineStatus(String(msg)));
+
+  ONLINE.socket.on("roomJoined", ({ code, seat, isHost, players: list }) => {
     ONLINE.roomCode = code;
     ONLINE.seat = seat;
     ONLINE.isHost = !!isHost;
 
-    // Host-only UI
-    if (hostRulesCardEl) hostRulesCardEl.style.display = ONLINE.isHost ? "block" : "none";
-    if (onlineStartBtnEl) onlineStartBtnEl.style.display = ONLINE.isHost ? "block" : "none";
+    if (onlineRoomInfoEl) onlineRoomInfoEl.style.display = "block";
+    if (onlineRoomCodeTextEl) onlineRoomCodeTextEl.textContent = code;
 
-    showRoomInfo(code, list);
+    if (onlineHostRulesEl) onlineHostRulesEl.style.display = ONLINE.isHost ? "block" : "none";
 
-    if (ONLINE.isHost) {
-      setLobbyStatus("Room created. Share the code, then start the game.");
-    } else {
-      setLobbyStatus("Joined room. Waiting for host to start...");
-    }
-
-    showLobbyOverlay();
+    renderOnlinePlayers(list);
+    setOnlineStatus(ONLINE.isHost ? "You are the host. Invite others with the room code." : "Joined! Waiting for host.");
+    hookGuestButtons();
+    hookHostActionReceiver();
   });
 
   ONLINE.socket.on("roomUpdate", ({ code, players: list }) => {
     if (code) ONLINE.roomCode = code;
-    showRoomInfo(ONLINE.roomCode, list);
+    renderOnlinePlayers(list);
   });
 
-  ONLINE.socket.on("roomError", (msg) => {
-    setLobbyStatus(msg || "Room error.");
+  // This event tells everyone to leave the lobby and get ready
+  ONLINE.socket.on("onlineStartGame", ({ players: lobbyPlayers }) => {
+    hideLobby();
+
+    // Guests do not init; they wait for snapshots
+    if (!ONLINE.isHost) {
+      ONLINE.started = true;
+      setOnlineStatus("Game starting... waiting for host state.");
+      return;
+    }
+
+    // Host initializes game
+    applyHostRulesToGame();
+    initGameFromLobbyPlayers(lobbyPlayers);
+    ONLINE.started = true;
+
+    // send first snapshot immediately
+    broadcastSnapshot();
+
+    // show color picker for everyone
+    showColorPickerIfNeeded();
   });
 
   ONLINE.socket.on("hostState", (snap) => {
-    // Non-hosts receive authoritative snapshots
-    if (!ONLINE.isHost) applySnapshot(snap);
+    if (ONLINE.isHost) return;
+    hideLobby();
+    applySnapshot(snap);
+    ONLINE.started = true;
+    showColorPickerIfNeeded();
   });
 
-  ONLINE.socket.on("hostAction", ({ type, payload }) => {
-    if (!ONLINE.isHost) return;
-
-    // Color choices: always allowed
-    if (type === "CHOOSE_COLOR") {
-      const seat = payload && typeof payload.seat === "number" ? payload.seat : null;
-      const colorName = payload && payload.colorName ? payload.colorName : null;
-      if (seat !== null && colorName) {
-        applySeatColorOnHost(seat, colorName);
-        setTimeout(broadcastSnapshot, 0);
+  ONLINE.socket.on("colorChosen", ({ seat, colorName }) => {
+    // Host applies and snapshots; guests just wait for snapshot to include it
+    if (ONLINE.isHost) {
+      applyColorOnHost(seat, colorName);
+      broadcastSnapshot();
+    }
+    // Guests: if their seat got color, hide picker
+    if (!ONLINE.isHost) {
+      // We'll hide after next snapshot, but can give immediate feedback
+      if (onlineColorSubtitleEl && Number(seat) === Number(ONLINE.seat)) {
+        onlineColorSubtitleEl.textContent = `Locked in: ${colorName}`;
       }
-      return;
-    }
-
-    const activeIdx = turnOrder && turnOrder.length ? turnOrder[currentTurnPointer] : 0;
-    const requesterSeat = payload && typeof payload.seat === "number" ? payload.seat : null;
-
-    if (requesterSeat !== null && requesterSeat !== activeIdx) return;
-
-    if (type === "ROLL") {
-      if (rollBtn) rollBtn.click();
-      setTimeout(broadcastSnapshot, 0);
-      return;
-    }
-    if (type === "END_TURN") {
-      if (endTurnBtn) endTurnBtn.click();
-      setTimeout(broadcastSnapshot, 0);
-      return;
-    }
-    if (type === "BANKRUPT") {
-      if (bankruptBtn) bankruptBtn.click();
-      setTimeout(broadcastSnapshot, 0);
-      return;
     }
   });
 
-  // UI handlers
-  if (createRoomBtnEl) {
-    createRoomBtnEl.addEventListener("click", () => {
-      const name = lobbyNameEl && lobbyNameEl.value ? lobbyNameEl.value.trim() : "";
+  // UI events
+  if (onlineCreateRoomBtnEl) {
+    onlineCreateRoomBtnEl.addEventListener("click", () => {
+      const name = onlineNameInputEl?.value || "Host";
       ONLINE.socket.emit("createRoom", { name });
-      setLobbyStatus("Creating room...");
     });
   }
-
-  if (joinRoomBtnEl) {
-    joinRoomBtnEl.addEventListener("click", () => {
-      const name = lobbyNameEl && lobbyNameEl.value ? lobbyNameEl.value.trim() : "";
-      const code = joinCodeInputEl && joinCodeInputEl.value ? joinCodeInputEl.value.trim() : "";
+  if (onlineJoinRoomBtnEl) {
+    onlineJoinRoomBtnEl.addEventListener("click", () => {
+      const name = onlineNameInputEl?.value || "Player";
+      const code = onlineJoinCodeInputEl?.value || "";
       ONLINE.socket.emit("joinRoom", { code, name });
-      setLobbyStatus("Joining room...");
     });
   }
-
-  if (copyRoomCodeBtnEl) {
-    copyRoomCodeBtnEl.addEventListener("click", async () => {
-      try {
-        if (!ONLINE.roomCode) return;
-        await navigator.clipboard.writeText(ONLINE.roomCode);
-        setLobbyStatus("Copied room code!");
-      } catch {
-        setLobbyStatus("Could not copy. Select and copy manually.");
-      }
-    });
-  }
-
-  if (closeLobbyBtnEl) {
-    closeLobbyBtnEl.addEventListener("click", () => hideLobbyOverlay());
-  }
-  if (lobbyOverlayEl) {
-    lobbyOverlayEl.addEventListener("click", (e) => {
-      if (e.target === lobbyOverlayEl) hideLobbyOverlay();
-    });
-  }
-  if (openLobbyBtnEl) {
-    openLobbyBtnEl.addEventListener("click", () => showLobbyOverlay());
-  }
-
   if (onlineStartBtnEl) {
     onlineStartBtnEl.addEventListener("click", () => {
       if (!ONLINE.isHost) return;
-      if (ONLINE.roomPlayers.length < 2) {
-        setLobbyStatus("Need at least 2 players to start.");
-        return;
-      }
-      hostStartOnlineGameNow();
+      if (!ONLINE.roomCode) return;
+      // Tell server to broadcast onlineStartGame, and host will init
+      ONLINE.socket.emit("hostStartOnlineGame");
+      setOnlineStatus("Starting game...");
     });
   }
-
-  // Non-host forwarding for core actions
-  forwardIfNonHost(rollBtn, "ROLL");
-  forwardIfNonHost(endTurnBtn, "END_TURN");
-  forwardIfNonHost(bankruptBtn, "BANKRUPT");
-
-  // Host: broadcast after almost any click that could mutate state
-  document.addEventListener("click", () => {
-    if (!ONLINE.enabled) return;
-    if (!ONLINE.isHost) return;
-    setTimeout(broadcastSnapshot, 20);
-  });
+  if (onlineLobbyCloseBtnEl) {
+    onlineLobbyCloseBtnEl.addEventListener("click", () => {
+      hideLobby();
+    });
+  }
 }
 
-initOnline();
+document.addEventListener("DOMContentLoaded", () => {
+  // Always show lobby first for online version
+  showLobby();
+  initOnlineNetworking();
+});
