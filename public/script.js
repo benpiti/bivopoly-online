@@ -1306,125 +1306,6 @@ let onlineState = {
   myColorName: "Orange"
 };
 
-// =====================
-// ONLINE SYNC (HOST-AUTH)
-// =====================
-// Host runs game logic. Everyone else sends requests.
-// Host broadcasts snapshots + dice rolls.
-
-let onlineSyncEnabled = false;
-let onlineSnapshotTimer = null;
-let lastD1 = null;
-let lastD2 = null;
-let pendingLandingContext = null; // { allowExtraTurnOnDoubles, d1, d2 }
-
-function hostPurchaseLandedProperty(tileIndex) {
-  const currentIdx = turnOrder && turnOrder.length ? turnOrder[currentTurnPointer] : 0;
-  const player = players[currentIdx];
-  const tile = board[tileIndex];
-  if (!player || !tile) return;
-  if (tile.owner != null) return;
-  if (!(tile.type === "property" || tile.type === "airport" || tile.type === "utility")) return;
-  if (player.money < (tile.price || 0)) return;
-
-  player.money -= tile.price;
-  tile.owner = player.id;
-  if (tile.type === "property" || tile.type === "airport" || tile.type === "utility") {
-    if (!player.properties.includes(tile.index)) player.properties.push(tile.index);
-  }
-
-  updateMoneyUI();
-  renderBoard();
-  if (selectedTileIndex === tile.index) renderPropertyInfo(tile);
-  updateHoldingsPanel();
-  logEvent(`${player.name} bought ${tile.name} for $${tile.price}.`);
-
-  
-          finalizeAfterLanding(allowExtraTurnOnDoubles, d1, d2);
-          return;
-const ctx = pendingLandingContext || { allowExtraTurnOnDoubles: true, d1: lastD1, d2: lastD2 };
-  pendingLandingContext = null;
-  finalizeAfterLanding(!!ctx.allowExtraTurnOnDoubles, ctx.d1, ctx.d2);
-}
-
-function hostSkipLandedProperty(tileIndex) {
-  const currentIdx = turnOrder && turnOrder.length ? turnOrder[currentTurnPointer] : 0;
-  const player = players[currentIdx];
-  const tile = board[tileIndex];
-  if (!player || !tile) return;
-
-  if (rules && rules.auctionMode) {
-    logEvent(`Auction started for ${tile.name} (purchase skipped).`);
-    startAuction(tile);
-  } else {
-    logEvent(`${player.name} chose not to buy ${tile.name}.`);
-  }
-
-  const ctx = pendingLandingContext || { allowExtraTurnOnDoubles: true, d1: lastD1, d2: lastD2 };
-  pendingLandingContext = null;
-  finalizeAfterLanding(!!ctx.allowExtraTurnOnDoubles, ctx.d1, ctx.d2);
-}
-
-
-function isOnlineHost() {
-  return !!socket && !!onlineState && !!onlineState.code && !!onlineState.isHost && onlineSyncEnabled;
-}
-function isOnlineGuest() {
-  return !!socket && !!onlineState && !!onlineState.code && !onlineState.isHost && onlineSyncEnabled;
-}
-
-function buildOnlineSnapshot() {
-  // Keep this focused on gameplay state. UI will re-render from these.
-  return {
-    players,
-    board,
-    turnOrder,
-    currentTurnPointer,
-    rules,
-    doublesInARow,
-    lastRollTotal,
-    freeParkingPot: (typeof freeParkingPot !== "undefined") ? freeParkingPot : 0,
-    auctionActive: (typeof auctionActive !== "undefined") ? auctionActive : false
-  };
-}
-
-function applyOnlineSnapshot(snap) {
-  if (!snap) return;
-  if (snap.players) players = snap.players;
-  if (snap.board) board = snap.board;
-  if (snap.turnOrder) turnOrder = snap.turnOrder;
-  if (typeof snap.currentTurnPointer === "number") currentTurnPointer = snap.currentTurnPointer;
-  if (snap.rules) rules = snap.rules;
-  if (typeof snap.doublesInARow === "number") doublesInARow = snap.doublesInARow;
-  if (typeof snap.lastRollTotal === "number") lastRollTotal = snap.lastRollTotal;
-  if (typeof snap.freeParkingPot === "number" && typeof freeParkingPot !== "undefined") freeParkingPot = snap.freeParkingPot;
-  if (typeof snap.auctionActive === "boolean" && typeof auctionActive !== "undefined") auctionActive = snap.auctionActive;
-
-  // Refresh UI
-  renderBoard();
-  updateMoneyUI();
-  updateHoldingsPanel();
-  populateTradeOtherPlayers();
-  populateTradePropertyLists();
-  updateCurrentTurnDisplay();
-}
-
-function hostBroadcastSnapshot() {
-  if (!isOnlineHost()) return;
-  try {
-    socket.emit("hostState", buildOnlineSnapshot());
-  } catch (_) {}
-}
-
-function ensureHostSnapshotTimer() {
-  if (!isOnlineHost()) return;
-  if (onlineSnapshotTimer) return;
-  onlineSnapshotTimer = setInterval(() => {
-    hostBroadcastSnapshot();
-  }, 250);
-}
-
-
 function showOnlineError(msg) {
   if (!onlineErrorEl) return;
   onlineErrorEl.textContent = msg;
@@ -1651,6 +1532,165 @@ if (startOnlineGameBtn) {
   });
 }
 
+bindHostActionReceiver();
+
+// ---------------------
+// ONLINE SYNC (HOST-AUTH)
+// ---------------------
+// Host runs the game logic. Guests only render snapshots and request actions.
+
+function deepClone(obj) {
+  try { return structuredClone(obj); } catch (_) {}
+  return JSON.parse(JSON.stringify(obj));
+}
+
+function buildOnlineSnapshot() {
+  return deepClone({
+    players,
+    board,
+    turnOrder,
+    currentTurnPointer,
+    lastRollTotal,
+    doublesInARow,
+    currentJailPlayerIdx,
+    chanceDeck,
+    communityDeck,
+    // Auction state (prevents desync during auctions)
+    auctionActive,
+    auctionTileIndex,
+    auctionPlayers,
+    auctionCurrentPlayerPtr,
+    auctionCurrentBid,
+    auctionHighestBidder,
+    auctionHighestBid,
+  });
+}
+
+function applyOnlineSnapshot(snap) {
+  if (!snap) return;
+  // Replace core state
+  players = snap.players;
+  // Replace board in-place to keep references stable in some helpers
+  if (Array.isArray(snap.board) && Array.isArray(board)) {
+    board.length = 0;
+    snap.board.forEach(x => board.push(x));
+  } else {
+    board = snap.board;
+  }
+  turnOrder = snap.turnOrder || turnOrder;
+  currentTurnPointer = typeof snap.currentTurnPointer === "number" ? snap.currentTurnPointer : currentTurnPointer;
+  lastRollTotal = typeof snap.lastRollTotal === "number" ? snap.lastRollTotal : lastRollTotal;
+  doublesInARow = typeof snap.doublesInARow === "number" ? snap.doublesInARow : doublesInARow;
+  currentJailPlayerIdx = (snap.currentJailPlayerIdx === null || typeof snap.currentJailPlayerIdx === "number") ? snap.currentJailPlayerIdx : currentJailPlayerIdx;
+
+  chanceDeck = snap.chanceDeck || chanceDeck;
+  communityDeck = snap.communityDeck || communityDeck;
+
+  auctionActive = !!snap.auctionActive;
+  auctionTileIndex = snap.auctionTileIndex ?? auctionTileIndex;
+  auctionPlayers = snap.auctionPlayers ?? auctionPlayers;
+  auctionCurrentPlayerPtr = snap.auctionCurrentPlayerPtr ?? auctionCurrentPlayerPtr;
+  auctionCurrentBid = snap.auctionCurrentBid ?? auctionCurrentBid;
+  auctionHighestBidder = snap.auctionHighestBidder ?? auctionHighestBidder;
+  auctionHighestBid = snap.auctionHighestBid ?? auctionHighestBid;
+
+  // Refresh UI
+  renderBoard();
+  updateMoneyUI();
+  updateTurnUI();
+}
+
+function updateTurnUI() {
+  const idx = (turnOrder && turnOrder.length) ? turnOrder[currentTurnPointer] : 0;
+  const p = players && players[idx] ? players[idx] : null;
+  if (currentTurnDisplay && p) currentTurnDisplay.textContent = `Current Turn: ${p.name}`;
+}
+
+// Host broadcasts snapshots on a short interval to guarantee sync
+let onlineSyncTimer = null;
+function startOnlineSyncLoop() {
+  if (!socket || !onlineState.isHost) return;
+  if (onlineSyncTimer) clearInterval(onlineSyncTimer);
+  onlineSyncTimer = setInterval(() => {
+    if (!onlineState.started) return;
+    socket.emit("hostState", buildOnlineSnapshot());
+  }, 250);
+}
+
+function stopOnlineSyncLoop() {
+  if (onlineSyncTimer) clearInterval(onlineSyncTimer);
+  onlineSyncTimer = null;
+}
+
+// Guests request actions instead of running local logic
+function requestHostAction(type, payload) {
+  if (!socket || !onlineState.code) return;
+  socket.emit("requestAction", { type, payload });
+}
+
+function bindGuestControlOverrides() {
+  if (!socket || onlineState.isHost) return;
+
+  // Buttons that mutate game state: intercept in capture phase and stop local logic
+  const ids = [
+    "rollBtn","endTurnBtn","bankruptBtn",
+    "propertyActionBtn1","propertyActionBtn2",
+    "auctionBidBtn","auctionPassBtn",
+    "jailUseCardBtn","jailPayBtn","jailRollBtn",
+    "actionPrimaryBtn","actionSecondaryBtn",
+    "debtPayNowBtn","debtBankruptBtn",
+    "tradeConfirmBtn","tradeCancelBtn"
+  ];
+
+  ids.forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("click", (e) => {
+      // Only override once the online game is started
+      if (!onlineState.started) return;
+      e.preventDefault();
+      e.stopPropagation();
+      requestHostAction(id.toUpperCase(), null);
+    }, true);
+  });
+}
+
+// Host executes guest requests by triggering the same buttons locally
+function bindHostActionReceiver() {
+  if (!socket) return;
+  socket.on("hostAction", ({ type }) => {
+    if (!onlineState.isHost) return;
+    const id = String(type || "").toLowerCase();
+    const map = {
+      "ROLLBTN": "rollBtn",
+      "ENDTURNBTN": "endTurnBtn",
+      "BANKRUPTBTN": "bankruptBtn",
+      "PROPERTYACTIONBTN1": "propertyActionBtn1",
+      "PROPERTYACTIONBTN2": "propertyActionBtn2",
+      "AUCTIONBIDBTN": "auctionBidBtn",
+      "AUCTIONPASSBTN": "auctionPassBtn",
+      "JAILUSECARDBTN": "jailUseCardBtn",
+      "JAILPAYBTN": "jailPayBtn",
+      "JAILROLLBTN": "jailRollBtn",
+      "ACTIONPRIMARYBTN": "actionPrimaryBtn",
+      "ACTIONSECONDARYBTN": "actionSecondaryBtn",
+      "DEBTPAYNOWBTN": "debtPayNowBtn",
+      "DEBTBANKRUPTBTN": "debtBankruptBtn",
+      "TRADECONFIRMBTN": "tradeConfirmBtn",
+      "TRADECANCELBTN": "tradeCancelBtn",
+    };
+    const btnId = map[type] || map[type?.toUpperCase?.()] || null;
+    if (!btnId) return;
+    const el = document.getElementById(btnId);
+    if (el) el.click();
+
+    // Snapshot after action
+    setTimeout(() => {
+      socket.emit("hostState", buildOnlineSnapshot());
+    }, 0);
+  });
+}
+
 // Socket events
 if (socket) {
   socket.on("connect", () => {
@@ -1682,75 +1722,42 @@ if (socket) {
     }
   });
 
+  socket.on("diceRoll", (payload) => {
+    if (onlineState.isHost) return; // host already showed it
+    if (!payload) return;
+    const d1 = Number(payload.d1);
+    const d2 = Number(payload.d2);
+    const total = Number(payload.total);
+    if (diceResultEl && payload.text) diceResultEl.textContent = payload.text;
+    if (Number.isFinite(d1) && Number.isFinite(d2)) {
+      showDiceOverlay(d1, d2, Number.isFinite(total) ? total : (d1+d2));
+    }
+  });
+
   socket.on("gameStarted", (payload) => {
+    // Only the host should initialize the local game engine.
+    // Guests will wait for hostState snapshots and render them.
     const list = payload && Array.isArray(payload.players) ? payload.players : onlineState.players;
-    applyOnlinePlayersToSetup(list);
-    closeOnlineOverlay();
-  });
 
-  // Enable online syncing once a game is started
-  onlineSyncEnabled = true;
+    if (onlineState.isHost) {
+      applyOnlinePlayersToSetup(list);
+      closeOnlineOverlay();
+      onlineState.started = true;
 
-  // Host starts snapshot timer (guests ignore)
-  ensureHostSnapshotTimer();
+      // Start continuous sync
+      startOnlineSyncLoop();
 
-
-  // Guests receive authoritative snapshots from host
-  socket.on("hostState", (snap) => {
-    if (isOnlineHost()) return; // host already has state
-    applyOnlineSnapshot(snap);
-  });
-
-  // Everyone receives dice rolls so guests can animate dice
-  socket.on("diceRoll", ({ d1, d2, total, playerSeat }) => {
-    // Update text
-    const name = (players && typeof playerSeat === "number" && players[playerSeat]) ? players[playerSeat].name : "Player";
-    if (diceResultEl) diceResultEl.textContent = `${name} rolled ${d1} + ${d2} = ${total}`;
-    // Animate center dice overlay for guests (host already did it locally)
-    if (isOnlineGuest()) {
-      showDiceOverlay(d1, d2, total);
-      setTimeout(() => hideDiceOverlay(), DICE_ANIM_MS);
+      // Immediately send first snapshot
+      if (socket) socket.emit("hostState", buildOnlineSnapshot());
+    } else {
+      onlineState.started = true;
+      closeOnlineOverlay();
+      // Guests: bind overrides so they request actions instead of running logic
+      bindGuestControlOverrides();
+      // Show a basic status line (no design changes)
+      if (diceResultEl) diceResultEl.textContent = "Waiting for host to sync game state...";
     }
   });
-
-  // Host receives action requests from guests
-  socket.on("hostAction", ({ type, payload, fromSeat }) => {
-    if (!isOnlineHost()) return;
-
-    // Only allow the player whose turn it is to request actions
-    const currentIdx = turnOrder && turnOrder.length ? turnOrder[currentTurnPointer] : 0;
-    if (typeof fromSeat === "number" && fromSeat !== currentIdx) {
-      return;
-    }
-
-    const t = String(type || "").toUpperCase();
-    if (t === "ROLL") {
-      if (rollBtn) rollBtn.click();
-      setTimeout(hostBroadcastSnapshot, 0);
-      return;
-    }
-    if (t === "END_TURN") {
-      if (endTurnBtn) endTurnBtn.click();
-      setTimeout(hostBroadcastSnapshot, 0);
-      return;
-    }
-    if (t === "BANKRUPT") {
-      if (bankruptBtn) bankruptBtn.click();
-      setTimeout(hostBroadcastSnapshot, 0);
-      return;
-    }
-    if (t === "BUY_TILE" && payload && typeof payload.tileIndex === "number") {
-      hostPurchaseLandedProperty(payload.tileIndex);
-      setTimeout(hostBroadcastSnapshot, 0);
-      return;
-    }
-    if (t === "SKIP_BUY" && payload && typeof payload.tileIndex === "number") {
-      hostSkipLandedProperty(payload.tileIndex);
-      setTimeout(hostBroadcastSnapshot, 0);
-      return;
-    }
-  });
-
 }
 
 // =====================
@@ -2372,7 +2379,7 @@ function calculateRent(tile, owner) {
 // LANDING EFFECTS
 // =====================
 
-function handleLanding(player, passedGo, allowExtraTurnOnDoubles = false, d1 = null, d2 = null) {
+function handleLanding(player, passedGo) {
   const tile = getBoardTile(player.position);
   if (!tile) return;
 
@@ -2528,9 +2535,6 @@ function showActionModal(options) {
   }
 
   actionOverlayEl.style.display = "flex";
-
-  return false;
-
 }
 
 function showInfoModal(message, title = "Bivopoly") {
@@ -2539,7 +2543,6 @@ function showInfoModal(message, title = "Bivopoly") {
     body: message,
     primaryLabel: "OK"
   });
-      return true;
 }
 
 // =====================
@@ -2908,9 +2911,7 @@ function handlePropertyAirportUtility(player, tile) {
           ? "Utility: rent depends on dice roll and number of utilities owned."
           : `Base Rent: $${tile.baseRent || 0}`;
 
-      pendingLandingContext = { allowExtraTurnOnDoubles, d1, d2 };
-
-            showActionModal({
+      showActionModal({
         title: tile.name,
         body:
           `${player.name} landed on ${tile.name}.\n` +
@@ -2919,13 +2920,7 @@ function handlePropertyAirportUtility(player, tile) {
           `Do you want to buy it?`,
         primaryLabel: "Buy",
         onPrimary: () => {
-          // Online guest: request host to buy, then wait for snapshot
-          if (isOnlineGuest()) {
-            socket.emit("requestAction", { type: "BUY_TILE", payload: { tileIndex: tile.index } });
-            return;
-          }
-
-          // Host / offline: complete purchase
+          // Complete purchase
           player.money -= tile.price;
           tile.owner = player.id;
 
@@ -2946,22 +2941,12 @@ function handlePropertyAirportUtility(player, tile) {
         },
         secondaryLabel: rules.auctionMode ? "Skip (Auction)" : "Skip",
         onSecondary: () => {
-          // Online guest: request host to skip/auction
-          if (isOnlineGuest()) {
-            socket.emit("requestAction", { type: "SKIP_BUY", payload: { tileIndex: tile.index } });
-            return;
-          }
-
           if (rules.auctionMode) {
             logEvent(`Auction started for ${tile.name} (purchase skipped).`);
             startAuction(tile);
           } else {
             logEvent(`${player.name} chose not to buy ${tile.name}.`);
           }
-
-          finalizeAfterLanding(allowExtraTurnOnDoubles, d1, d2);
-          return;
-
         }
       });
     } else {
@@ -4210,24 +4195,6 @@ function attemptJailRoll(playerIdx, player) {
 }
 
 // Shared movement/landing logic used by normal rolls & jail rolls
-
-function finalizeAfterLanding(allowExtraTurnOnDoubles, d1, d2) {
-  // Doubles = extra turn (only in normal movement, not leaving jail)
-  if (allowExtraTurnOnDoubles && d1 !== null && d2 !== null && d1 === d2) {
-    showInfoModal(`${players[turnOrder[currentTurnPointer]].name} rolled doubles and gets another turn!`);
-    updateCurrentTurnDisplay();
-  } else {
-    advanceToNextPlayer();
-  }
-
-  renderBoard();
-  updateHoldingsPanel();
-  populateTradeOtherPlayers();
-  populateTradePropertyLists();
-
-  // Sync
-  hostBroadcastSnapshot();
-}
 function performMovementAndLanding(playerIdx, player, rollTotal, allowExtraTurnOnDoubles, d1 = null, d2 = null) {
   const oldPos = player.position;
   let newPos = (oldPos + rollTotal) % board.length;
@@ -4262,11 +4229,7 @@ function performMovementAndLanding(playerIdx, player, rollTotal, allowExtraTurnO
 
   setTimeout(() => {
     if (newPos !== 30) {
-      const awaitingDecision = handleLanding(player, passedGo, allowExtraTurnOnDoubles, d1, d2);
-        if (awaitingDecision) {
-          // landing will finalize turn after the player chooses in the modal
-          return;
-        }
+      handleLanding(player, passedGo);
     }
 
     // Extra turn only allowed for NORMAL doubles (not leaving jail)
@@ -4289,9 +4252,6 @@ function advanceToNextPlayer() {
   doublesInARow = 0; // reset when a turn fully ends
   currentTurnPointer = (currentTurnPointer + 1) % turnOrder.length;
   updateCurrentTurnDisplay();
-
-  // Online sync
-  hostBroadcastSnapshot();
 }
 
 let currentTurnPhase = "Ready to Roll";
@@ -4329,12 +4289,6 @@ function startPostJailRoll(playerIdx) {
   const d1 = Math.floor(Math.random() * 6) + 1;
   const d2 = Math.floor(Math.random() * 6) + 1;
   const rollTotal = d1 + d2;
-    lastD1 = d1;
-    lastD2 = d2;
-    if (isOnlineHost()) {
-      try { socket.emit("diceRoll", { d1, d2, total: rollTotal, playerSeat: currentIdx }); } catch(_) {}
-    }
-
   lastRollTotal = rollTotal;
 
   if (diceResultEl) {
@@ -4342,6 +4296,10 @@ function startPostJailRoll(playerIdx) {
       `${player.name} rolled ${d1} + ${d2} = ${rollTotal}`;
   }
 
+  // Online sync: broadcast dice roll so guests see the same animation/text
+  if (socket && onlineState.started && onlineState.isHost && onlineState.code) {
+    socket.emit("diceRoll", { d1, d2, total: rollTotal, text: diceResultEl ? diceResultEl.textContent : "" });
+  }
   showDiceOverlay(d1, d2, rollTotal);
 
   setTimeout(() => {
@@ -4500,14 +4458,21 @@ function performMovementAndLanding(
           );
         } else {
           // Normal landing
-          const awaitingDecision = handleLanding(player, passedGo, allowExtraTurnOnDoubles, d1, d2);
-        if (awaitingDecision) {
-          // landing will finalize turn after the player chooses in the modal
-          return;
-        }
+          handleLanding(player, passedGo);
         }
 
-        finalizeAfterLanding(allowExtraTurnOnDoubles, d1, d2);
+        // Doubles = extra turn (only in normal movement, not leaving jail)
+        if (allowExtraTurnOnDoubles && d1 !== null && d2 !== null && d1 === d2) {
+          showInfoModal(`${player.name} rolled doubles and gets another turn!`);
+          updateCurrentTurnDisplay();
+        } else {
+          advanceToNextPlayer();
+        }
+
+        renderBoard();
+        updateHoldingsPanel();
+        populateTradeOtherPlayers();
+        populateTradePropertyLists();
       }, LANDING_PAUSE_MS);
 
       return;
@@ -4525,11 +4490,7 @@ function performMovementAndLanding(
 
   // Safety: if somehow there are no steps, just handle landing immediately
   if (path.length === 0) {
-    const awaitingDecision = handleLanding(player, passedGo, allowExtraTurnOnDoubles, d1, d2);
-        if (awaitingDecision) {
-          // landing will finalize turn after the player chooses in the modal
-          return;
-        }
+    handleLanding(player, passedGo);
     return;
   }
 
@@ -4573,12 +4534,6 @@ function startPostJailRoll(playerIdx) {
   const d1 = Math.floor(Math.random() * 6) + 1;
   const d2 = Math.floor(Math.random() * 6) + 1;
   const rollTotal = d1 + d2;
-    lastD1 = d1;
-    lastD2 = d2;
-    if (isOnlineHost()) {
-      try { socket.emit("diceRoll", { d1, d2, total: rollTotal, playerSeat: currentIdx }); } catch(_) {}
-    }
-
   lastRollTotal = rollTotal;
 
   if (diceResultEl) {
@@ -4586,6 +4541,10 @@ function startPostJailRoll(playerIdx) {
       `${player.name} rolled ${d1} + ${d2} = ${rollTotal}`;
   }
 
+  // Online sync: broadcast dice roll so guests see the same animation/text
+  if (socket && onlineState.started && onlineState.isHost && onlineState.code) {
+    socket.emit("diceRoll", { d1, d2, total: rollTotal, text: diceResultEl ? diceResultEl.textContent : "" });
+  }
   showDiceOverlay(d1, d2, rollTotal);
 
   setTimeout(() => {
@@ -4613,12 +4572,6 @@ if (auctionPassBtn) auctionPassBtn.addEventListener("click", handleAuctionPass);
 
 if (rollBtn) {
   rollBtn.addEventListener("click", () => {
-    if (isOnlineGuest()) {
-      // Request host to roll for you (host-authoritative)
-      socket.emit("requestAction", { type: "ROLL", payload: null });
-      return;
-    }
-
     if (!turnOrder.length) {
       showInfoModal("Start the game from the setup screen before rolling.");
       return;
@@ -4645,12 +4598,6 @@ if (rollBtn) {
     const d1 = Math.floor(Math.random() * 6) + 1;
     const d2 = Math.floor(Math.random() * 6) + 1;
     const rollTotal = d1 + d2;
-    lastD1 = d1;
-    lastD2 = d2;
-    if (isOnlineHost()) {
-      try { socket.emit("diceRoll", { d1, d2, total: rollTotal, playerSeat: currentIdx }); } catch(_) {}
-    }
-
     lastRollTotal = rollTotal;
 
     if (diceResultEl) {
@@ -4684,7 +4631,11 @@ if (rollBtn) {
     }
 
     // Show center dice overlay
-    showDiceOverlay(d1, d2, rollTotal);
+    // Online sync: broadcast dice roll so guests see the same animation/text
+  if (socket && onlineState.started && onlineState.isHost && onlineState.code) {
+    socket.emit("diceRoll", { d1, d2, total: rollTotal, text: diceResultEl ? diceResultEl.textContent : "" });
+  }
+  showDiceOverlay(d1, d2, rollTotal);
 
     setTimeout(() => {
       hideDiceOverlay();
@@ -4709,11 +4660,6 @@ if (rollBtn) {
 
 if (endTurnBtn) {
   endTurnBtn.addEventListener("click", () => {
-    if (isOnlineGuest()) {
-      socket.emit("requestAction", { type: "END_TURN", payload: null });
-      return;
-    }
-
     // No game yet
     if (!turnOrder || !turnOrder.length) {
       showInfoModal(

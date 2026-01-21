@@ -127,18 +127,7 @@ io.on("connection",(socket)=>{
     io.to(code).emit("hostState", snapshot);
   });
 
-  
-  // Host broadcasts dice results so guests can animate dice consistently
-  socket.on("diceRoll", ({ d1, d2, total, playerSeat }) => {
-    const code = socket.data.roomCode;
-    if (!code) return;
-    const room = rooms.get(code);
-    if (!room) return;
-    if (room.hostId !== socket.id) return;
-    io.to(code).emit("diceRoll", { d1, d2, total, playerSeat });
-  });
-
-socket.on("requestAction",({type, payload})=>{
+  socket.on("requestAction",({type, payload})=>{
     const code=socket.data.roomCode;
     if(!code) return;
     const room=rooms.get(code); if(!room) return;
@@ -148,7 +137,18 @@ socket.on("requestAction",({type, payload})=>{
     io.to(room.hostId).emit("hostAction",{type:String(type||"").toUpperCase(), payload:payload??null, fromSeat:from.seat, fromName:from.name});
   });
 
-  socket.on("disconnect",()=>{
+  
+  // Host broadcasts dice roll so guests can animate/show the same result
+  socket.on("diceRoll", (payload) => {
+    const code = socket.data.roomCode;
+    if (!code) return;
+    const room = rooms.get(code);
+    if (!room) return;
+    if (room.hostId !== socket.id) return;
+    io.to(code).emit("diceRoll", payload);
+  });
+
+socket.on("disconnect",()=>{
     const code=socket.data.roomCode;
     if(!code) return;
     removePlayer(code, socket.id);
