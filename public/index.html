@@ -228,13 +228,87 @@
           </div>
         </div>
 
-        <button id="startGameBtn" class="primary-btn">
-          Start Game
-        </button>
+        <div style="display:flex; justify-content:center; gap:12px; flex-wrap:wrap; margin-top: 6px;">
+          <button id="startGameBtn" class="primary-btn">
+            Start Game
+          </button>
+
+          <!-- Online mode UI only appears when this is clicked -->
+          <button id="playOnlineBtn" class="secondary-btn">
+            Play Online Game
+          </button>
+        </div>
 
         <p id="setupHint" class="setup-hint">
           Choose unique colors for all selected players.
         </p>
+      </div>
+    </div>
+
+    <!-- ONLINE MODE OVERLAY (hidden until Play Online Game is clicked) -->
+    <div id="onlineOverlay" class="online-overlay" style="display:none;">
+      <div class="online-card">
+        <h2 class="online-title">Play Online</h2>
+        <p class="online-subtitle">
+          Host creates a room code. Other players enter the code to join.
+          Each player chooses their own token color.
+        </p>
+
+        <div id="onlineStep1" class="online-step">
+          <div class="online-row">
+            <label for="onlineNameInput">Your Name</label>
+            <input id="onlineNameInput" class="name-input" maxlength="15" placeholder="Your name" />
+          </div>
+
+          <div class="online-row">
+            <label for="onlineColorSelect">Your Color</label>
+            <select id="onlineColorSelect" class="field-select"></select>
+            <div class="color-preview-row" style="justify-content:flex-start;">
+              <span class="color-dot" id="onlineColorDot"></span>
+              <span id="onlineColorValue" class="color-name">Orange</span>
+            </div>
+          </div>
+
+          <div class="online-actions">
+            <button id="createRoomBtn" class="primary-btn">Create Room</button>
+
+            <div class="online-join-inline">
+              <input id="joinCodeInput" class="name-input" maxlength="8" placeholder="Room code" />
+              <button id="joinRoomBtn" class="secondary-btn">Join Room</button>
+            </div>
+          </div>
+
+          <p id="onlineError" class="online-error" style="display:none;"></p>
+        </div>
+
+        <div id="onlineLobby" class="online-step" style="display:none;">
+          <div class="online-lobby-top">
+            <div>
+              <div class="online-code-label">Room Code</div>
+              <div class="online-code" id="roomCodeDisplay">—</div>
+              <button id="copyRoomCodeBtn" class="secondary-btn online-copy-btn">Copy Code</button>
+            </div>
+            <div class="online-status" id="onlineStatus">Connecting…</div>
+          </div>
+
+          <div class="online-row">
+            <div class="online-players-title">Players</div>
+            <div id="onlinePlayersList" class="online-players-list"></div>
+          </div>
+
+          <div class="online-actions" style="justify-content:space-between;">
+            <button id="leaveRoomBtn" class="secondary-btn">Leave</button>
+            <button id="startOnlineGameBtn" class="primary-btn" style="display:none;">Start Online Game</button>
+          </div>
+
+          <p class="online-hint">
+            Host: press <strong>Start Online Game</strong> when everyone has joined.
+          </p>
+        </div>
+
+        <div class="online-footer">
+          <button id="closeOnlineOverlayBtn" class="secondary-btn">Close</button>
+        </div>
       </div>
     </div>
 
@@ -536,6 +610,10 @@
     </div>
   </div>
 
+  <!-- Socket.io client is served automatically by server.js (Express + Socket.io) -->
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- Socket.IO client (served by server.js). Safe if running locally without server. -->
+  <script src="/socket.io/socket.io.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

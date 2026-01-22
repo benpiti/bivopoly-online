@@ -32,7 +32,12 @@ function createUniqueCode(){
   return c;
 }
 function publicPlayers(room){
-  return room.players.map(p=>({name:p.name, seat:p.seat, isHost:p.isHost}));
+  return room.players.map(p=>({
+    name: p.name,
+    seat: p.seat,
+    isHost: p.isHost,
+    colorName: p.colorName || null
+  }));
 }
 function removePlayer(code, socketId){
   const room=rooms.get(code);
@@ -53,15 +58,26 @@ io.on("connection",(socket)=>{
 
   socket.on("createRoom",({name})=>{
     const code=createUniqueCode();
-    const room={hostId:socket.id, players:[{socketId:socket.id,name:String(name||"Host").slice(0,15),seat:0,isHost:true}], lastSnapshot:null};
+    const room={
+      hostId: socket.id,
+      started: false,
+      players: [{
+        socketId: socket.id,
+        name: String(name||"Host").slice(0,15),
+        seat: 0,
+        isHost: true,
+        colorName: null
+      }],
+      lastSnapshot: null
+    };
     rooms.set(code, room);
     socket.join(code);
     socket.data.roomCode=code;
-    socket.emit("roomJoined",{code, seat:0, isHost:true, players:publicPlayers(room)});
-    io.to(code).emit("roomUpdate",{code, players:publicPlayers(room)});
+    socket.emit("roomJoined",{code, seat:0, isHost:true, players:publicPlayers(room), started: room.started});
+    io.to(code).emit("roomUpdate",{code, players:publicPlayers(room), started: room.started});
   });
 
-  socket.on("joinRoom",({code,name})=>{
+  socket.on("joinRoom",({code,name, color})=>{
     const clean=String(code||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,8);
     const room=rooms.get(clean);
     if(!room) return socket.emit("roomError","Room not found.");
@@ -69,11 +85,37 @@ io.on("connection",(socket)=>{
 
     const used=new Set(room.players.map(p=>p.seat));
     let seat=0; while(used.has(seat)) seat++;
-    room.players.push({socketId:socket.id,name:String(name||"Player").slice(0,15),seat,isHost:false});
+    room.players.push({
+      socketId: socket.id,
+      name: String(name||"Player").slice(0,15),
+      seat,
+      isHost: false,
+      colorName: color ? String(color).slice(0,20) : null
+    });
     socket.join(clean); socket.data.roomCode=clean;
-    socket.emit("roomJoined",{code:clean, seat, isHost:false, players:publicPlayers(room)});
-    io.to(clean).emit("roomUpdate",{code:clean, players:publicPlayers(room)});
+    socket.emit("roomJoined",{code:clean, seat, isHost:false, players:publicPlayers(room), started: room.started});
+    io.to(clean).emit("roomUpdate",{code:clean, players:publicPlayers(room), started: room.started});
     if(room.lastSnapshot) socket.emit("hostState", room.lastSnapshot);
+  });
+
+  socket.on("setColor",({color})=>{
+    const code=socket.data.roomCode;
+    if(!code) return;
+    const room=rooms.get(code); if(!room) return;
+    const p = room.players.find(p=>p.socketId===socket.id);
+    if(!p) return;
+    p.colorName = color ? String(color).slice(0,20) : null;
+    io.to(code).emit("roomUpdate",{code, players:publicPlayers(room), started: room.started});
+  });
+
+  socket.on("startGame",()=>{
+    const code=socket.data.roomCode;
+    if(!code) return;
+    const room=rooms.get(code); if(!room) return;
+    if(room.hostId!==socket.id) return;
+    room.started = true;
+    io.to(code).emit("gameStarted",{code, players:publicPlayers(room)});
+    io.to(code).emit("roomUpdate",{code, players:publicPlayers(room), started: room.started});
   });
 
   socket.on("hostState",(snapshot)=>{
@@ -95,16 +137,49 @@ io.on("connection",(socket)=>{
     io.to(room.hostId).emit("hostAction",{type:String(type||"").toUpperCase(), payload:payload??null, fromSeat:from.seat, fromName:from.name});
   });
 
-  socket.on("disconnect",()=>{
+  
+  // HOST: start online game (tell everyone in room to transition)
+  socket.on("hostStartOnlineGame", () => {
+    const code = socket.data?.roomCode;
+    if (!code) return;
+    io.to(code).emit("onlineStartGame");
+  });
+
+  // Host broadcasts authoritative snapshots
+  socket.on("hostState", (snapshot) => {
+    const code = socket.data?.roomCode;
+    if (!code) return;
+    io.to(code).emit("hostState", snapshot);
+  });
+
+  // Guests request actions; server forwards to host if rooms map is available
+  socket.on("requestAction", ({ type, payload }) => {
+    const code = socket.data?.roomCode;
+    if (!code) return;
+    const room = (typeof rooms !== "undefined" && rooms.get) ? rooms.get(code) : null;
+    if (!room) return;
+    const hostId = room.hostId;
+    if (!hostId) return;
+
+    const from = (room.players || []).find(p => p.socketId === socket.id);
+    io.to(hostId).emit("hostAction", {
+      type: String(type || "").toUpperCase(),
+      payload: payload ?? null,
+      fromSeat: from ? from.seat : null,
+      fromName: from ? from.name : null
+    });
+  });
+
+socket.on("disconnect",()=>{
     const code=socket.data.roomCode;
     if(!code) return;
     removePlayer(code, socket.id);
     const room=rooms.get(code);
     if(room){
-      io.to(code).emit("roomUpdate",{code, players:publicPlayers(room)});
+      io.to(code).emit("roomUpdate",{code, players:publicPlayers(room), started: room.started});
       const hostPlayer=room.players.find(p=>p.socketId===room.hostId);
       if(hostPlayer){
-        io.to(room.hostId).emit("roomJoined",{code, seat:hostPlayer.seat, isHost:true, players:publicPlayers(room)});
+        io.to(room.hostId).emit("roomJoined",{code, seat:hostPlayer.seat, isHost:true, players:publicPlayers(room), started: room.started});
       }
     }
   });
