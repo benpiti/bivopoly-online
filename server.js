@@ -410,15 +410,15 @@ function give(player, amount) {
 }
 
 function startGame(room) {
-  const board = deepClone(BOARD_TEMPLATE).map((t, idx) => {
-    // ensure index exists for client logic
+  const board = deepClone(BOARD_TEMPLATE).map((t, idx) => ({
     ...t,
+    // ensure index exists for client logic
     index: (typeof t.index === "number") ? t.index : idx,
     owner: null,
-    houses: t.houses ?? 0,
-    hotel: t.hotel ?? false,
-    mortgaged: t.mortgaged ?? false
-  });
+    houses: (t.houses ?? 0),
+    hotel: (t.hotel ?? false),
+    mortgaged: (t.mortgaged ?? false)
+  }));
 
   const players = room.players
     .slice()
